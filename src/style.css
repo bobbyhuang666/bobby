@@ -301,6 +301,41 @@ body {
   scroll-behavior: smooth;
 }
 
+/* 聊天页顶部动态提示 */
+.recent-note-hint {
+  display: none;
+  text-align: center;
+  padding: 10px 16px;
+  margin-bottom: 8px;
+  background: rgba(130,160,200,0.04);
+  border: 1px solid rgba(130,160,200,0.08);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.recent-note-hint.show {
+  display: block;
+  animation: fadeIn 0.5s ease;
+}
+
+.recent-note-hint:active {
+  background: rgba(130,160,200,0.08);
+}
+
+.recent-note-hint-label {
+  font-size: 10px;
+  color: rgba(130,160,200,0.5);
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+}
+
+.recent-note-hint-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
 .msg-list {
   display: flex;
   flex-direction: column;
@@ -378,16 +413,33 @@ body {
   color: var(--accent);
 }
 
-/* 时间戳 */
-.msg-time {
-  font-size: 10px;
-  color: var(--text-muted);
+/* 消息元数据（时间 + 已读状态） */
+.msg-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-top: 4px;
   padding: 0 4px;
 }
 
-.msg.right .msg-time {
-  text-align: right;
+.msg.right .msg-meta {
+  justify-content: flex-end;
+}
+
+.msg-time {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.msg-status {
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: color 0.4s ease;
+}
+
+.msg-status.read {
+  color: var(--accent);
+  opacity: 0.7;
 }
 
 /* 内心独白 */
@@ -611,6 +663,43 @@ body {
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 100px;
+  margin-bottom: 16px;
+}
+
+/* 关系深度条 */
+.intimacy-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.intimacy-level {
+  font-size: 12px;
+  color: var(--accent);
+  letter-spacing: 2px;
+}
+
+.intimacy-track {
+  width: 120px;
+  height: 3px;
+  background: var(--bg-surface);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.intimacy-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 1s cubic-bezier(0.16,1,0.3,1);
+}
+
+.intimacy-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
 }
 
 .mood-dot {
@@ -636,6 +725,44 @@ body {
   overflow-y: auto;
   padding: 0 16px 16px;
   -webkit-overflow-scrolling: touch;
+}
+
+/* 此刻 - 感官体验卡片 */
+.moment-card {
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(130,160,200,0.06) 0%, rgba(212,165,116,0.04) 100%);
+  border: 1px solid rgba(130,160,200,0.1);
+  border-radius: 16px;
+  margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.moment-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(130,160,200,0.04) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.moment-label {
+  font-size: 10px;
+  color: rgba(130,160,200,0.5);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.moment-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-style: italic;
+  letter-spacing: 0.5px;
 }
 
 /* 礼物入口 */
@@ -1001,6 +1128,144 @@ body {
 .toast.show {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+/* ===== 动态评论 ===== */
+.note-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.note-comment-btn {
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.3s;
+}
+
+.note-comment-btn:hover,
+.note-comment-btn.active {
+  color: var(--accent);
+}
+
+.note-comment-section {
+  display: none;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.note-comment-section.show {
+  display: block;
+  animation: fadeIn 0.3s ease;
+}
+
+.comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.comment-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  animation: fadeInUp 0.3s ease;
+}
+
+.comment-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.comment-avatar.bobby {
+  background: var(--bobby-bubble);
+  border-color: var(--bobby-bubble-border);
+}
+
+.comment-body {
+  flex: 1;
+}
+
+.comment-author {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.comment-author.bobby {
+  color: rgba(130, 160, 200, 0.7);
+}
+
+.comment-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.comment-input-wrap {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.comment-input {
+  flex: 1;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 13px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.3s;
+}
+
+.comment-input::placeholder {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.comment-input:focus {
+  border-color: rgba(255,255,255,0.12);
+}
+
+.comment-send-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 6px;
+  transition: color 0.3s;
+  display: flex;
+  align-items: center;
+}
+
+.comment-send-btn.active {
+  color: var(--accent);
+}
+
+.comment-send-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 
 /* ===== 通用动画 ===== */

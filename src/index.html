@@ -61,6 +61,7 @@
       </div>
 
       <div class="chat-area" id="chatArea">
+        <div class="recent-note-hint" id="recentNoteHint"></div>
         <div class="msg-list" id="msgList"></div>
         <div class="typing" id="typing">
           <div class="typing-bubble">
@@ -119,10 +120,23 @@
             <span class="mood-dot" id="moodDot"></span>
             <span class="mood-text" id="moodText">还没睡呢</span>
           </div>
+          <div class="intimacy-bar" id="intimacyBar">
+            <div class="intimacy-level" id="intimacyLevel">陌生</div>
+            <div class="intimacy-track">
+              <div class="intimacy-fill" id="intimacyFill" style="width: 0%"></div>
+            </div>
+            <div class="intimacy-desc" id="intimacyDesc">你们还不太熟</div>
+          </div>
         </div>
       </div>
 
       <div class="profile-body">
+        <!-- 此刻 - 感官体验卡片 -->
+        <div class="moment-card" id="momentCard">
+          <div class="moment-label">此刻</div>
+          <div class="moment-text" id="momentText">窗户上有雾气，外面的灯光有点模糊。</div>
+        </div>
+
         <!-- 送礼入口 -->
         <div class="gift-entry" onclick="showGiftPanel()">
           <span class="gift-entry-icon">☕</span>
