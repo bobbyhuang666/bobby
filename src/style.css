@@ -59,6 +59,16 @@ body {
   background: var(--bg-deep);
 }
 
+/* 暗角效果 - 增加氛围感 */
+.app::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 50%, transparent 50%, rgba(0,0,0,0.4) 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
 /* ===== 引导页 ===== */
 .onboarding {
   position: fixed;
@@ -168,6 +178,12 @@ body {
 
 .page.active {
   display: flex;
+  animation: pageIn 0.25s ease;
+}
+
+@keyframes pageIn {
+  from { opacity: 0.8; }
+  to { opacity: 1; }
 }
 
 /* ===== 顶部导航 ===== */
@@ -311,6 +327,17 @@ body {
 @keyframes msgIn {
   from { opacity: 0; transform: translateY(12px) scale(0.97); }
   to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Bobby 的新消息有微光效果 */
+.msg.left.new-msg .bubble {
+  animation: msgGlow 2s ease;
+}
+
+@keyframes msgGlow {
+  0% { box-shadow: 0 0 0 0 transparent; }
+  30% { box-shadow: 0 0 20px 0 rgba(130,160,200,0.1); }
+  100% { box-shadow: 0 0 0 0 transparent; }
 }
 
 .msg .avatar {

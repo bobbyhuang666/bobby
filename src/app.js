@@ -581,6 +581,7 @@ function addMessage(text, isUser) {
       <div class="msg-time">${formatTimeFriendly(new Date())}</div>
     `;
   } else {
+    el.className += ' new-msg';
     el.innerHTML = `
       <div class="avatar"><img src="images/ai-avatar.svg" alt="Bobby" /></div>
       <div>
@@ -588,6 +589,8 @@ function addMessage(text, isUser) {
         <div class="msg-time">${formatTimeFriendly(new Date())}</div>
       </div>
     `;
+    // 移除 new-msg class（动画结束后）
+    setTimeout(() => el.classList.remove('new-msg'), 2000);
   }
 
   dom.msgList.appendChild(el);
