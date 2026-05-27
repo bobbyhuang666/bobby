@@ -81,6 +81,11 @@ router.post('/:giftId', authMiddleware, async (req, res) => {
       bobbyEngine.broadcastStatus();
     }
 
+    // 礼物影响 Bobby 情绪
+    if (bobbyEngine && bobbyEngine.emotion) {
+      bobbyEngine.emotion.applyGiftEffect(gift.type);
+    }
+
     // 倒霉礼物：生成吐槽动态
     if (gift.type === 'bad' && Math.random() < 0.5) {
       const notes = BAD_LUCK_NOTES[giftId];
