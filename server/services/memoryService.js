@@ -83,38 +83,39 @@ class MemoryService {
   }
 
   // 学习：从对话中提取记忆（Learn）
+  // 只从用户消息中提取事实和偏好，避免 Bobby 自己的话被误记为用户信息
   static async learnFromConversation(userId, userText, bobbyReply) {
-    // 事实提取
+    // 事实提取（仅从用户消息）
     const facts = this._extractFacts(userText);
     for (const fact of facts) {
       await this.addMemory(userId, {
         type: 'fact',
-        content: fact,
+        content: `用户说：${fact}`,
         source: 'conversation',
-        tags: ['fact']
+        tags: ['fact', 'user']
       });
     }
 
-    // 情绪提取
+    // 情绪提取（用户的情绪状态）
     const emotion = this._extractEmotion(userText);
     if (emotion) {
       await this.addMemory(userId, {
         type: 'emotion',
-        content: `${emotion.label}: "${userText.slice(0, 30)}"`,
+        content: `对方${emotion.label}：${userText.slice(0, 20)}`,
         emotionTag: emotion.tag,
         source: 'conversation',
         tags: ['emotion', emotion.tag]
       });
     }
 
-    // 偏好提取
+    // 偏好提取（仅从用户消息）
     const preferences = this._extractPreferences(userText);
     for (const pref of preferences) {
       await this.addMemory(userId, {
         type: 'preference',
-        content: pref,
+        content: `对方${pref}`,
         source: 'conversation',
-        tags: ['preference']
+        tags: ['preference', 'user']
       });
     }
   }
@@ -301,11 +302,14 @@ class MemoryService {
 
   static _extractFacts(text) {
     const facts = [];
-    // 简单的事实提取规则
-    if (/我叫|我是|我名字/.test(text)) {
+    // 排除问句
+    if (/[？?吗呢吧]$/.test(text.trim())) return facts;
+
+    // 简单的事实提取规则（只提取陈述句）
+    if (/我叫|我名字|我是.{2,}/.test(text) && !/是谁/.test(text)) {
       facts.push(text.slice(0, 40));
     }
-    if (/我在|我住在|我家/.test(text)) {
+    if (/我住在|我家在/.test(text)) {
       facts.push(text.slice(0, 40));
     }
     if (/我喜欢|我爱|我不喜欢|我讨厌/.test(text)) {
@@ -315,10 +319,16 @@ class MemoryService {
   }
 
   static _extractEmotion(text) {
+    // 问句不检测情绪
+    const isQuestion = /[？?吗呢吧]$/.test(text.trim());
+
     if (/累|疲|辛苦/.test(text)) return { label: '疲惫', tag: 'tired' };
     if (/难过|伤心|哭/.test(text)) return { label: '难过', tag: 'sad' };
     if (/开心|高兴|哈哈/.test(text)) return { label: '开心', tag: 'warm' };
-    if (/孤独|寂寞|一个人/.test(text)) return { label: '孤独', tag: 'lonely' };
+    // "一个人"只有在非问句中才算孤独
+    if ((/孤独|寂寞/.test(text) || (/一个人/.test(text) && !isQuestion))) {
+      return { label: '孤独', tag: 'lonely' };
+    }
     if (/生气|气死/.test(text)) return { label: '生气', tag: 'angry' };
     if (/谢谢|感谢/.test(text)) return { label: '感激', tag: 'warm' };
     return null;
