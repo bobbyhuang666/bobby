@@ -111,7 +111,11 @@ const state = {
   msgId: 0,
   statusText: '还没睡呢',
   isOnline: true,
-  isOnboarded: false
+  isOnboarded: false,
+  visitCount: 0,
+  lastTopic: '',    // 最近聊的话题
+  userMood: '',     // 用户当前情绪
+  giftReceived: []  // 收到的礼物
 };
 
 // ===== DOM =====
@@ -260,6 +264,44 @@ function initParticles() {
   draw();
 }
 
+// ===== 记忆系统 =====
+function loadMemory() {
+  const memory = localStorage.getItem('bobby_memory');
+  if (memory) {
+    try {
+      const m = JSON.parse(memory);
+      state.visitCount = (m.visitCount || 0) + 1;
+      state.lastTopic = m.lastTopic || '';
+      state.userMood = m.userMood || '';
+      state.giftReceived = m.giftReceived || [];
+    } catch(e) {}
+  } else {
+    state.visitCount = 1;
+  }
+}
+
+function saveMemory() {
+  localStorage.setItem('bobby_memory', JSON.stringify({
+    visitCount: state.visitCount,
+    lastTopic: state.lastTopic,
+    userMood: state.userMood,
+    giftReceived: state.giftReceived
+  }));
+}
+
+function updateMemory(userText) {
+  // 更新话题
+  if (userText.length > 2) {
+    state.lastTopic = userText.slice(0, 20);
+  }
+  // 更新情绪
+  if (/累|疲|辛苦/.test(userText)) state.userMood = 'tired';
+  else if (/难过|伤心|哭|烦/.test(userText)) state.userMood = 'sad';
+  else if (/开心|高兴|哈哈/.test(userText)) state.userMood = 'happy';
+  else if (/睡不着|失眠/.test(userText)) state.userMood = 'insomnia';
+  saveMemory();
+}
+
 // ===== 引导页 =====
 function initOnboarding() {
   const visited = localStorage.getItem('bobby_visited');
@@ -368,11 +410,33 @@ function updateTimeBackground() {
 function startApp() {
   updateTimeBackground();
   setInterval(updateTimeBackground, 60000);
-  // Bobby 先发一条消息
+  loadMemory();
+
+  // Bobby 的开场白 - 根据访问次数变化
   setTimeout(() => {
-    const greeting = isNight() ? getNightGreeting() : getDayGreeting();
-    // 先显示内心独白
-    addThought('有点眼熟...');
+    let greeting;
+
+    if (state.visitCount <= 1) {
+      addThought('有点眼熟...');
+      greeting = isNight() ? '嗯...还没睡？' : '嗯？';
+    } else if (state.visitCount <= 3) {
+      addThought('又来了...');
+      greeting = isNight() ? '嗯，来了' : '嗯';
+    } else {
+      addThought('');
+      const returnGreetings = isNight() ? [
+        '嗯，来了',
+        '等你一会儿了...才没有',
+        '嗯，我在',
+        '今天也来了啊'
+      ] : [
+        '嗯',
+        '来了',
+        '嗯嗯'
+      ];
+      greeting = returnGreetings[Math.floor(Math.random() * returnGreetings.length)];
+    }
+
     setTimeout(() => addMessage(greeting, false), 1200);
   }, 600);
 }
@@ -526,6 +590,7 @@ function sendMessage() {
   if (!text) return;
 
   addMessage(text, true);
+  updateMemory(text);
   dom.inputBox.value = '';
   dom.sendBtn.disabled = true;
   dom.sendBtn.classList.remove('active');
@@ -661,6 +726,10 @@ function sendGift(giftId) {
   if (!gift) return;
 
   hideGiftPanel();
+
+  // 记录礼物
+  state.giftReceived.push(giftId);
+  saveMemory();
 
   // 显示送礼动画
   dom.giftSuccessEmoji.textContent = gift.emoji;
