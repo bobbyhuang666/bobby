@@ -473,7 +473,7 @@ function getReply(userText) {
   const pool = isNight() ? [...DATA.nightReplies] : [...DATA.dayReplies];
   const text = (userText || '').toLowerCase();
 
-  // 情绪关键词匹配 - 简单但有效
+  // 情绪关键词匹配
   const emotionReplies = {
     sad: ['嗯...', '会好的', '我在', '别想太多', '嗯，我也是'],
     tired: ['早点休息', '今天辛苦了', '嗯，我也困了', '别撑着'],
@@ -481,6 +481,36 @@ function getReply(userText) {
     happy: ['嗯', '那就好', '是吗'],
     late: ['还没睡？', '太晚了', '快睡吧', '嗯...我也睡不着']
   };
+
+  // Bobby 引用自己的动态 - 让用户感觉它有记忆
+  const noteCallbacks = {
+    rain: ['刚才窗户上全是水痕', '嗯，还在下', '雨声好大'],
+    cat: ['那只猫今天又来了', '嗯...不知道它去哪了'],
+    food: ['刚吃完东西', '便利店阿姨又多给了一块'],
+    cold: ['好冷', '窗户关着还是觉得冷'],
+    music: ['在听一首很好听的歌', '耳机里在放...算了你没听过'],
+    sleep: ['昨天也是这个点才睡着', '困了但不想睡'],
+    alone: ['隔壁的灯也灭了', '街上没人了']
+  };
+
+  // 15% 概率引用自己的动态（如果匹配）
+  if (Math.random() < 0.15) {
+    if (/雨|下雨|淋/.test(text) && noteCallbacks.rain) {
+      return noteCallbacks.rain[Math.floor(Math.random() * noteCallbacks.rain.length)];
+    }
+    if (/猫|小猫/.test(text) && noteCallbacks.cat) {
+      return noteCallbacks.cat[Math.floor(Math.random() * noteCallbacks.cat.length)];
+    }
+    if (/吃|饿|饭|宵夜/.test(text) && noteCallbacks.food) {
+      return noteCallbacks.food[Math.floor(Math.random() * noteCallbacks.food.length)];
+    }
+    if (/冷|冻|凉/.test(text) && noteCallbacks.cold) {
+      return noteCallbacks.cold[Math.floor(Math.random() * noteCallbacks.cold.length)];
+    }
+    if (/歌|音乐|听/.test(text) && noteCallbacks.music) {
+      return noteCallbacks.music[Math.floor(Math.random() * noteCallbacks.music.length)];
+    }
+  }
 
   let candidates = pool;
 
@@ -490,7 +520,7 @@ function getReply(userText) {
     candidates = emotionReplies.sad;
   } else if (/一个人|没人|没朋友|孤单/.test(text)) {
     candidates = emotionReplies.lonely;
-  } else if (/开心|高兴|好事|哈哈|开心|太好了/.test(text)) {
+  } else if (/开心|高兴|好事|哈哈|太好了/.test(text)) {
     candidates = emotionReplies.happy;
   } else if (/睡不着|失眠|醒了/.test(text)) {
     candidates = emotionReplies.late;
