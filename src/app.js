@@ -1718,6 +1718,17 @@ function hideGiftPanel() {
   dom.giftPanel.classList.remove('show');
 }
 
+// VIP 面板
+function showVipPanel() {
+  const panel = document.getElementById('vipPanel');
+  if (panel) panel.classList.add('show');
+}
+
+function hideVipPanel() {
+  const panel = document.getElementById('vipPanel');
+  if (panel) panel.classList.remove('show');
+}
+
 function sendGift(giftId) {
   const gift = DATA.gifts.find(g => g.id === giftId);
   if (!gift) return;

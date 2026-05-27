@@ -182,6 +182,15 @@
             </div>
           </div>
         </div>
+
+        <!-- VIP 入口 -->
+        <div class="vip-card" onclick="showVipPanel()">
+          <div class="vip-card-content">
+            <div class="vip-card-title">成为深夜知己</div>
+            <div class="vip-card-desc">解锁更深的记忆、更多碎片、专属互动</div>
+          </div>
+          <span class="gift-entry-arrow">›</span>
+        </div>
       </div>
 
       <div class="tab-bar">
@@ -252,6 +261,45 @@
       <div class="gift-success-content">
         <div class="gift-success-emoji" id="giftSuccessEmoji"></div>
         <p class="gift-success-text">已悄悄送出</p>
+      </div>
+    </div>
+
+    <!-- VIP 面板 -->
+    <div class="vip-panel" id="vipPanel" onclick="hideVipPanel()">
+      <div class="vip-sheet" onclick="event.stopPropagation()">
+        <div class="gift-handle"></div>
+        <h3 class="gift-title">深夜知己</h3>
+        <p class="gift-subtitle">让 Bobby 记住更多关于你的事</p>
+
+        <div class="vip-tier">
+          <div class="vip-tier-header">
+            <span class="vip-tier-name">🌙 月光</span>
+            <span class="vip-tier-price">¥18/月</span>
+          </div>
+          <div class="vip-tier-features">
+            <div class="vip-feature">记忆深度 ×3</div>
+            <div class="vip-feature">每日碎片 ×2</div>
+            <div class="vip-feature">关系进度加速</div>
+          </div>
+          <button class="vip-btn" onclick="showToast('即将开放')">订阅</button>
+        </div>
+
+        <div class="vip-tier featured">
+          <div class="vip-tier-badge">最受欢迎</div>
+          <div class="vip-tier-header">
+            <span class="vip-tier-name">⭐ 星海</span>
+            <span class="vip-tier-price">¥48/月</span>
+          </div>
+          <div class="vip-tier-features">
+            <div class="vip-feature">月光全部权益</div>
+            <div class="vip-feature">Bobby 主动消息频率 ×2</div>
+            <div class="vip-feature">专属动态内容</div>
+            <div class="vip-feature">照片/语音消息更多</div>
+          </div>
+          <button class="vip-btn primary" onclick="showToast('即将开放')">订阅</button>
+        </div>
+
+        <p class="vip-note">所有互动都是匿名的。Bobby 不知道你是不是 VIP。</p>
       </div>
     </div>
 
