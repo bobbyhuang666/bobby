@@ -1465,11 +1465,6 @@ function loadNotes() {
             ${note.liked ? '❤️' : '♡'} ${note.likes || ''}
           </button>
         </div>
-        <div class="note-actions">
-          <button class="note-comment-btn" onclick="toggleCommentSection(${note.id})">
-            💬 ${note.comments && note.comments.length > 0 ? note.comments.length : '评论'}
-          </button>
-        </div>
         <div class="note-comment-section" id="commentSection-${note.id}">
           <div class="comment-list" id="commentList-${note.id}">
             ${renderComments(note)}
@@ -1486,6 +1481,11 @@ function loadNotes() {
   });
 
   container.innerHTML = html;
+
+  // 绑定每条动态的评论输入框
+  DATA.notes.forEach(note => {
+    setupCommentInput(note.id);
+  });
 }
 
 function toggleLike(id) {
@@ -1512,30 +1512,6 @@ function renderComments(note) {
   `).join('');
 }
 
-function toggleCommentSection(noteId) {
-  const section = document.getElementById(`commentSection-${noteId}`);
-  if (!section) return;
-
-  // 关闭其他打开的评论区
-  document.querySelectorAll('.note-comment-section.show').forEach(s => {
-    if (s.id !== `commentSection-${noteId}`) {
-      s.classList.remove('show');
-    }
-  });
-
-  section.classList.toggle('show');
-
-  // 展开时聚焦输入框
-  if (section.classList.contains('show')) {
-    const input = document.getElementById(`commentInput-${noteId}`);
-    if (input) {
-      setTimeout(() => {
-        input.focus();
-        setupCommentInput(noteId);
-      }, 100);
-    }
-  }
-}
 
 function setupCommentInput(noteId) {
   const input = document.getElementById(`commentInput-${noteId}`);

@@ -1518,15 +1518,9 @@ body {
 }
 
 .note-comment-section {
-  display: none;
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
-}
-
-.note-comment-section.show {
-  display: block;
-  animation: fadeIn 0.3s ease;
 }
 
 .comment-list {
