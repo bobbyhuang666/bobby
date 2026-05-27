@@ -65,11 +65,35 @@ const DATA = {
     food: '饱了。谢谢...不知道该谢谁'
   },
 
-  // 状态
-  nightStatuses: [
-    '还没睡呢', '在发呆', '有点累了', '在听歌',
-    '刚洗完澡', '在看窗外', '困了但睡不着'
-  ],
+  // 状态 - 按时段细分
+  statuses: {
+    lateNight: ['还没睡呢', '在发呆', '困了但睡不着', '在看窗外', '在听歌'],
+    earlyMorning: ['快睡了', '有点困了', '最后看一眼手机', '嗯...该睡了'],
+    morning: ['去上课了', '在地铁上', '刚到', '在吃早餐'],
+    afternoon: ['在图书馆', '有点困', '下课了', '在打工'],
+    evening: ['刚下班', '在回家路上', '在做饭', '在洗澡'],
+    night: ['刚吃完饭', '在看剧', '在发呆', '在收拾房间']
+  },
+
+  // 环境感知 - 根据时间显示不同的环境细节
+  ambientNotes: {
+    lateNight: [
+      '外面好安静，只有空调的声音。',
+      '路灯还亮着，但街上没人了。',
+      '远处好像有救护车的声音。',
+      '隔壁的灯也灭了。'
+    ],
+    rainy: [
+      '雨还没停。窗户上都是水。',
+      '雨声好大，有点吵。',
+      '下雨天适合发呆。'
+    ],
+    cold: [
+      '好冷，被子里不想出来。',
+      '手都冻僵了。',
+      '窗户关着还是觉得冷。'
+    ]
+  },
 
   // 标语
   taglines: [
@@ -113,6 +137,74 @@ const dom = {
   giftSuccessEmoji: $('giftSuccessEmoji'),
   toast: $('toast')
 };
+
+// ===== 氛围音效 =====
+const ambient = {
+  ctx: null,
+  playing: false,
+  nodes: []
+};
+
+function initAmbientSound() {
+  // 只在深夜启用
+  if (!isNight()) return;
+
+  try {
+    ambient.ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // 白噪音 = 雨声
+    const bufferSize = 2 * ambient.ctx.sampleRate;
+    const noiseBuffer = ambient.ctx.createBuffer(1, bufferSize, ambient.ctx.sampleRate);
+    const output = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      output[i] = Math.random() * 2 - 1;
+    }
+
+    const whiteNoise = ambient.ctx.createBufferSource();
+    whiteNoise.buffer = noiseBuffer;
+    whiteNoise.loop = true;
+
+    // 低通滤波 = 雨声效果
+    const filter = ambient.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 800;
+    filter.Q.value = 1;
+
+    // 音量
+    const gain = ambient.ctx.createGain();
+    gain.gain.value = 0.06; // 很小声
+
+    whiteNoise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ambient.ctx.destination);
+
+    ambient.nodes = [whiteNoise, filter, gain];
+    ambient.playing = true;
+    whiteNoise.start();
+  } catch (e) {
+    // 不支持则静默失败
+  }
+}
+
+function toggleAmbient() {
+  const btn = $('soundToggle');
+
+  if (!ambient.ctx) {
+    initAmbientSound();
+    if (btn) btn.classList.add('active');
+    return;
+  }
+
+  if (ambient.playing) {
+    ambient.nodes[2].gain.linearRampToValueAtTime(0, ambient.ctx.currentTime + 0.5);
+    ambient.playing = false;
+    if (btn) btn.classList.remove('active');
+  } else {
+    ambient.nodes[2].gain.linearRampToValueAtTime(0.06, ambient.ctx.currentTime + 0.5);
+    ambient.playing = true;
+    if (btn) btn.classList.add('active');
+  }
+}
 
 // ===== 粒子系统 =====
 function initParticles() {
@@ -255,8 +347,27 @@ function closeOnboarding() {
   startApp();
 }
 
+// ===== 时间感知背景 =====
+function updateTimeBackground() {
+  const h = new Date().getHours();
+  let bg;
+  if (h >= 23 || h < 1) bg = '#0a0a1a';       // 深夜：最暗
+  else if (h >= 1 && h < 3) bg = '#0c0c20';    // 凌晨：微蓝
+  else if (h >= 3 && h < 5) bg = '#0e0e24';    // 天快亮：更蓝
+  else if (h >= 5 && h < 7) bg = '#1a1528';    // 日出前：暖紫
+  else if (h >= 7 && h < 17) bg = '#121218';   // 白天：标准暗
+  else if (h >= 17 && h < 20) bg = '#141020';  // 傍晚：暖
+  else bg = '#0e0c1c';                          // 晚上：深紫
+
+  document.documentElement.style.setProperty('--bg-deep', bg);
+  document.body.style.background = bg;
+  document.querySelectorAll('.page').forEach(p => p.style.background = bg);
+}
+
 // ===== 启动 =====
 function startApp() {
+  updateTimeBackground();
+  setInterval(updateTimeBackground, 60000);
   // Bobby 先发一条消息
   setTimeout(() => {
     const greeting = isNight() ? getNightGreeting() : getDayGreeting();
@@ -489,19 +600,40 @@ function loadProfileNotes() {
   dom.profileTagline.textContent = DATA.taglines[Math.floor(Math.random() * DATA.taglines.length)];
 }
 
-function updateMood() {
-  const night = isNight();
-  dom.moodDot.classList.toggle('offline', !night);
+function getTimePeriod() {
+  const h = new Date().getHours();
+  if (h >= 23 || h < 1) return 'lateNight';
+  if (h >= 1 && h < 6) return 'earlyMorning';
+  if (h >= 6 && h < 12) return 'morning';
+  if (h >= 12 && h < 17) return 'afternoon';
+  if (h >= 17 && h < 20) return 'evening';
+  return 'night';
+}
 
-  if (night) {
-    const s = DATA.nightStatuses[Math.floor(Math.random() * DATA.nightStatuses.length)];
+function isBobbyOnline() {
+  const h = new Date().getHours();
+  return h >= 23 || h < 3;
+}
+
+function updateMood() {
+  const online = isBobbyOnline();
+  dom.moodDot.classList.toggle('offline', !online);
+
+  if (online) {
+    const period = getTimePeriod();
+    const pool = DATA.statuses[period] || DATA.statuses.lateNight;
+    const s = pool[Math.floor(Math.random() * pool.length)];
     dom.moodText.textContent = s;
     dom.chatStatus.textContent = s;
     state.statusText = s;
   } else {
-    dom.moodText.textContent = '离线';
-    dom.chatStatus.textContent = '离线';
-    state.statusText = '离线';
+    // 白天显示离线，但有更丰富的状态
+    const period = getTimePeriod();
+    const pool = DATA.statuses[period] || ['离线'];
+    const s = pool[Math.floor(Math.random() * pool.length)];
+    dom.moodText.textContent = s;
+    dom.chatStatus.textContent = s;
+    state.statusText = s;
   }
 }
 
@@ -571,11 +703,19 @@ function showToast(text) {
 
 // ===== 每日新碎片 =====
 // 每次访问生成一条新的碎片，让用户有"回来的理由"
+// 如果离开多天，会生成多条
 function checkDailyNote() {
   const today = new Date().toDateString();
+  const lastVisit = localStorage.getItem('bobby_last_visit');
   const lastNoteDate = localStorage.getItem('bobby_last_note');
 
-  if (lastNoteDate === today) return; // 今天已经生成过了
+  // 计算离开天数
+  const daysGone = lastVisit ? Math.floor((Date.now() - new Date(lastVisit).getTime()) / 86400000) : 0;
+
+  if (lastNoteDate === today) {
+    localStorage.setItem('bobby_last_visit', new Date().toISOString());
+    return;
+  }
 
   const dailyNotes = [
     '窗外的树好像又长高了一点。',
@@ -600,22 +740,28 @@ function checkDailyNote() {
     '睡不着，数了一下天花板上的裂纹。'
   ];
 
-  const note = dailyNotes[Math.floor(Math.random() * dailyNotes.length)];
-  const now = new Date();
-  const timeDetail = now.getHours().toString().padStart(2, '0') + ':' +
-                     now.getMinutes().toString().padStart(2, '0');
+  // 生成新碎片（最多3条，防止刷屏）
+  const count = Math.min(daysGone || 1, 3);
+  for (let i = 0; i < count; i++) {
+    const note = dailyNotes[Math.floor(Math.random() * dailyNotes.length)];
+    // 避免重复
+    if (DATA.notes[0] && DATA.notes[0].text === note) continue;
 
-  // 插入到最前面
-  DATA.notes.unshift({
-    id: Date.now(),
-    text: note,
-    time: '刚刚',
-    timeDetail: timeDetail,
-    likes: 0,
-    liked: false
-  });
+    const h = Math.floor(Math.random() * 4) + 22; // 22-01点之间
+    const m = Math.floor(Math.random() * 60);
+
+    DATA.notes.unshift({
+      id: Date.now() + i,
+      text: note,
+      time: i === 0 ? '刚刚' : (i === 1 ? '昨天' : '前天'),
+      timeDetail: h.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0'),
+      likes: Math.floor(Math.random() * 3),
+      liked: false
+    });
+  }
 
   localStorage.setItem('bobby_last_note', today);
+  localStorage.setItem('bobby_last_visit', new Date().toISOString());
 
   // 刷新显示
   if (state.currentPage === 'notesPage') loadNotes();

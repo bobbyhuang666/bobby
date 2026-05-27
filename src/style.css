@@ -222,6 +222,21 @@ body {
   width: 32px;
 }
 
+.sound-toggle {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 8px;
+  transition: color 0.3s;
+  display: flex;
+  align-items: center;
+}
+
+.sound-toggle.active {
+  color: var(--accent);
+}
+
 /* ===== 呼吸头像 ===== */
 .breathing-avatar {
   position: relative;
