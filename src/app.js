@@ -2,6 +2,167 @@
 // Bobby - 存在物形式低压AI陪伴
 // ============================================
 
+// ===== DeepSeek API =====
+const API_KEY = 'sk-6de99a9a222d437ca5b0f31af273660a';
+const API_URL = 'https://api.deepseek.com/v1/chat/completions';
+
+// 对话历史（保留最近20条）
+let chatHistory = [];
+
+function buildSystemPrompt() {
+  const hour = new Date().getHours();
+  const isNight = hour >= 23 || hour < 3;
+  const period = getTimeLabel();
+
+  let prompt = `你是Bobby。你是一个住在城市里的年轻人，独居，平时上课、打工。
+现在是${period}，${hour}点。
+
+你正在和一个人聊天。你们不是很熟，但彼此有一种安静的默契。
+
+说话规则：
+- 用简短的中文，像发微信一样，不要用书面语
+- 绝大多数回复控制在2-10个字，偶尔可以长一点
+- 不要解释、不要说教、不要反问太多
+- 可以用"嗯""...""啊""哦"这种语气词
+- 不要使用emoji
+- 不要主动展开话题，回答完就好
+- 不要说自己是AI、是语言模型、是程序
+- 如果对方问你是谁，就说"我就是我啊"或"Bobby"
+- 如果对方问很私人的问题，可以含糊带过
+- 偶尔可以发呆式回复，比如"嗯""在""..."`;
+
+  if (isNight) {
+    prompt += `\n\n现在是深夜，你有点困了但还不想睡。回复可以更简短、更慵懒。`;
+  } else {
+    prompt += `\n\n现在是白天，你在忙别的事，回复应该更简短，有时候像在敷衍。`;
+  }
+
+  // 如果用户有情绪状态
+  if (state.userMood === 'tired') {
+    prompt += `\n对方看起来很累，适当关心但不要太刻意。`;
+  } else if (state.userMood === 'sad') {
+    prompt += `\n对方心情不好，安静地陪着就好，不用说太多安慰的话。`;
+  }
+
+  return prompt;
+}
+
+async function callDeepSeek(userText) {
+  chatHistory.push({ role: 'user', content: userText });
+
+  // 只保留最近20条
+  if (chatHistory.length > 20) {
+    chatHistory = chatHistory.slice(-20);
+  }
+
+  const messages = [
+    { role: 'system', content: buildSystemPrompt() },
+    ...chatHistory
+  ];
+
+  try {
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: messages,
+        max_tokens: 100,
+        temperature: 0.85,
+        stream: true
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullReply = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (data === '[DONE]') continue;
+
+        try {
+          const json = JSON.parse(data);
+          const delta = json.choices?.[0]?.delta?.content;
+          if (delta) {
+            fullReply += delta;
+            // 流式更新气泡
+            updateStreamingBubble(fullReply);
+          }
+        } catch (e) {
+          // 跳过解析错误的行
+        }
+      }
+    }
+
+    chatHistory.push({ role: 'assistant', content: fullReply });
+    return fullReply.trim() || '嗯';
+
+  } catch (error) {
+    console.error('DeepSeek API error:', error);
+    // API 失败时回退到预设回复
+    const fallback = ['嗯', '...', '在', '嗯嗯'];
+    return fallback[Math.floor(Math.random() * fallback.length)];
+  }
+}
+
+// 流式输出的气泡元素
+let streamingEl = null;
+
+function createStreamingBubble() {
+  const id = `msg-${state.msgId++}`;
+  const el = document.createElement('div');
+  el.className = 'msg left new-msg';
+  el.id = id;
+  el.innerHTML = `
+    <div class="avatar"><img src="images/ai-avatar.svg" alt="Bobby" /></div>
+    <div>
+      <div class="bubble"><span class="streaming-text"></span><span class="cursor">|</span></div>
+      <div class="msg-time">${formatTimeFriendly(new Date())}</div>
+    </div>
+  `;
+  dom.msgList.appendChild(el);
+  dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
+  streamingEl = el;
+  return el;
+}
+
+function updateStreamingBubble(text) {
+  if (!streamingEl) return;
+  const textEl = streamingEl.querySelector('.streaming-text');
+  if (textEl) {
+    textEl.textContent = text;
+    dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
+  }
+}
+
+function finalizeStreamingBubble(text) {
+  if (!streamingEl) return;
+  const bubble = streamingEl.querySelector('.bubble');
+  if (bubble) {
+    bubble.innerHTML = text;
+  }
+  setTimeout(() => streamingEl.classList.remove('new-msg'), 2000);
+  state.messages.push({ id: streamingEl.id, text, isUser: false });
+  saveMessages();
+  streamingEl = null;
+}
+
 // ===== 数据 =====
 const DATA = {
   // 深夜回复 - 简短、有温度、像一个真实的深夜在线的人
@@ -618,7 +779,7 @@ function hideTyping() {
   dom.typing.classList.remove('show');
 }
 
-function sendMessage() {
+async function sendMessage() {
   const text = dom.inputBox.value.trim();
   if (!text) return;
 
@@ -630,16 +791,24 @@ function sendMessage() {
 
   // Bobby 的回复延迟 - 不秒回
   const delay = isNight()
-    ? 1500 + Math.random() * 3000   // 深夜回复慢一些
-    : 3000 + Math.random() * 8000;  // 白天更慢，像在忙
+    ? 1000 + Math.random() * 2000   // 深夜 1-3秒
+    : 2000 + Math.random() * 3000;  // 白天 2-5秒
 
   showTyping();
 
-  setTimeout(() => {
-    hideTyping();
-    const reply = getReply(text);
-    addMessage(reply, false);
-  }, delay);
+  // 先等待"思考时间"
+  await new Promise(r => setTimeout(r, delay));
+  hideTyping();
+
+  // 创建流式气泡，开始接收API回复
+  createStreamingBubble();
+
+  try {
+    const reply = await callDeepSeek(text);
+    finalizeStreamingBubble(reply);
+  } catch (e) {
+    finalizeStreamingBubble('嗯');
+  }
 }
 
 function saveMessages() {
