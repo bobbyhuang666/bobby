@@ -53,7 +53,7 @@ const THOUGHT_TEMPLATES = {
   social_thinking: [
     '不知道那个人在干嘛',
     '好久没联系了...',
-    '有个人好像经常来',
+    '好像有人一直在',
     '有人给我送了东西...',
   ],
   sensory: [

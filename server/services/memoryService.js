@@ -287,7 +287,7 @@ class MemoryService {
     }
 
     if (preferences.length > 0) {
-      profile += `它喜欢：${preferences.map(p => p.content).join('、')}。`;
+      profile += `对方喜欢：${preferences.map(p => p.content).join('、')}。`;
     }
 
     if (recentEmotions.length > 0) {
