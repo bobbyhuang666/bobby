@@ -4,31 +4,45 @@
 
 // ===== 数据 =====
 const DATA = {
-  // 深夜回复 - 简短、有温度、不像AI
+  // 深夜回复 - 简短、有温度、像一个真实的深夜在线的人
   nightReplies: [
     '嗯', '在', '还没睡', '睡不着吗',
     '外面好安静', '嗯...', '知道了',
     '有点困了', '今天有点累', '在发呆',
     '...你怎么也没睡', '风好大',
-    '嗯，我在', '别想太多', '会好的'
+    '嗯，我在', '别想太多', '会好的',
+    '我也是', '月亮挺亮的', '刚洗完澡',
+    '困了但不想睡', '在听歌',
+    '今天过得还好吗', '嗯，有点冷',
+    '窗户上有雾气', '在看天花板'
   ],
 
-  // 白天回复 - 更简短、像在"忙"
+  // 白天回复 - 更简短、像在"忙"、偶尔回多一点
   dayReplies: [
     '嗯', '在忙', '等下说', '刚看到',
-    '怎么了', '好', '嗯知道了'
+    '怎么了', '好', '嗯知道了',
+    '刚下课', '困', '在吃饭',
+    '嗯嗯', '好晚才看到'
   ],
 
-  // 动态 - 碎片化、有画面感
+  // 动态 - 碎片化、有画面感、像一个真实的人在记录生活
   notes: [
-    { id: 1, text: '下雨了，窗户上全是水痕。', time: '昨天', timeDetail: '23:45', likes: 2, liked: false },
-    { id: 2, text: '楼下便利店的关东煮，萝卜最好吃。', time: '昨天', timeDetail: '15:20', likes: 1, liked: false },
-    { id: 3, text: '学不进去。盯着天花板发了半小时呆。', time: '前天', timeDetail: '02:10', likes: 3, liked: false },
-    { id: 4, text: '加班到现在。路上一个人也没有。', time: '3天前', timeDetail: '23:30', likes: 0, liked: false },
-    { id: 5, text: '突然想吃草莓。但是太贵了。', time: '3天前', timeDetail: '18:05', likes: 4, liked: false },
-    { id: 6, text: '猫又来窗台了。不知道是谁家的。', time: '4天前', timeDetail: '22:15', likes: 5, liked: false },
-    { id: 7, text: '耳机里在放一首很久没听的歌。', time: '5天前', timeDetail: '01:30', likes: 2, liked: false },
-    { id: 8, text: '路灯下面有只蛾子一直在转圈。', time: '5天前', timeDetail: '23:55', likes: 3, liked: false }
+    { id: 1, text: '下雨了，窗户上全是水痕。盯着看了一会儿。', time: '今天', timeDetail: '01:23', likes: 2, liked: false },
+    { id: 2, text: '楼下便利店的关东煮，萝卜最好吃。阿姨多给了一块。', time: '今天', timeDetail: '00:15', likes: 1, liked: false },
+    { id: 3, text: '学不进去。盯着天花板发了半小时呆。天花板上有个小裂缝，上次还没注意到。', time: '昨天', timeDetail: '02:10', likes: 3, liked: false },
+    { id: 4, text: '加班到现在。地铁上只有我和一个睡着的人。', time: '昨天', timeDetail: '23:30', likes: 0, liked: false },
+    { id: 5, text: '突然想吃草莓。看了一下价格，算了。', time: '前天', timeDetail: '18:05', likes: 4, liked: false },
+    { id: 6, text: '猫又来窗台了。这次带了一只小的。', time: '前天', timeDetail: '22:15', likes: 5, liked: false },
+    { id: 7, text: '耳机里在放一首很久没听的歌。突然想起一些事。', time: '3天前', timeDetail: '01:30', likes: 2, liked: false },
+    { id: 8, text: '路灯下面有只蛾子一直在转圈。看了好久。', time: '3天前', timeDetail: '23:55', likes: 3, liked: false },
+    { id: 9, text: '洗完澡出来，头发还没干，风一吹好冷。', time: '4天前', timeDetail: '00:40', likes: 1, liked: false },
+    { id: 10, text: '路过一家店，门口的风铃响了。好听。', time: '4天前', timeDetail: '19:20', likes: 4, liked: false },
+    { id: 11, text: '手机快没电了，充电线又找不到了。', time: '5天前', timeDetail: '02:55', likes: 2, liked: false },
+    { id: 12, text: '外面有人在吵架。听不清在说什么。', time: '5天前', timeDetail: '23:10', likes: 0, liked: false },
+    { id: 13, text: '云走得很快。月亮一会儿有一会儿没有。', time: '6天前', timeDetail: '01:05', likes: 6, liked: false },
+    { id: 14, text: '买了一杯热可可，太甜了。但暖手。', time: '6天前', timeDetail: '20:30', likes: 3, liked: false },
+    { id: 15, text: '发现阳台上不知道什么时候长了一棵小草。', time: '一周前', timeDetail: '15:45', likes: 7, liked: false },
+    { id: 16, text: '室友今天很安静。不知道怎么了。', time: '一周前', timeDetail: '23:00', likes: 2, liked: false }
   ],
 
   // 礼物
@@ -41,14 +55,14 @@ const DATA = {
     { id: 'food', emoji: '🍜', name: '宵夜', price: 250 }
   ],
 
-  // 礼物效果 - 更含蓄
+  // 礼物效果 - 更含蓄、更有画面感
   giftEffects: {
     coffee: '嗯...好像清醒了一点',
-    medicine: '鼻子好像通了',
-    taxi: '到了，今天运气不错',
-    book: '在看一本新的',
-    blanket: '暖和了',
-    food: '饱了'
+    medicine: '鼻子通了，终于',
+    taxi: '到了。不用挤地铁了',
+    book: '在看一本新的，还不错',
+    blanket: '暖和了，好困',
+    food: '饱了。谢谢...不知道该谢谁'
   },
 
   // 状态
@@ -164,22 +178,80 @@ function initOnboarding() {
     return;
   }
 
-  const steps = ['step1', 'step2', 'step3', 'step4'];
+  // 引导页粒子
+  initOnboardingParticles();
+
+  // 更慢的节奏，让用户有时间感受
+  const steps = ['step1', 'step2', 'step3', 'step4', 'step5'];
   steps.forEach((id, i) => {
     setTimeout(() => {
       $(id).classList.add('show');
-    }, 800 + i * 700);
+    }, 1200 + i * 1000);
   });
 
   setTimeout(() => {
     dom.onboardingBtn.classList.add('show');
-  }, 800 + steps.length * 700 + 400);
+  }, 1200 + steps.length * 1000 + 600);
+}
+
+let onboardingAnimRunning = false;
+
+function initOnboardingParticles() {
+  const canvas = $('onboardingParticles');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let w, h, particles = [];
+  onboardingAnimRunning = true;
+
+  function resize() {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+  }
+
+  function createParticle() {
+    return {
+      x: Math.random() * w,
+      y: Math.random() * h,
+      size: Math.random() * 2 + 0.5,
+      speedX: (Math.random() - 0.5) * 0.2,
+      speedY: -Math.random() * 0.3 - 0.1,
+      opacity: Math.random() * 0.4 + 0.1,
+      pulse: Math.random() * Math.PI * 2
+    };
+  }
+
+  resize();
+  particles = Array.from({ length: 60 }, createParticle);
+
+  function draw() {
+    if (!onboardingAnimRunning) return;
+    ctx.clearRect(0, 0, w, h);
+    particles.forEach(p => {
+      p.x += p.speedX;
+      p.y += p.speedY;
+      p.pulse += 0.015;
+      const alpha = p.opacity * (0.4 + 0.6 * Math.sin(p.pulse));
+      if (p.y < -10) { p.y = h + 10; p.x = Math.random() * w; }
+      if (p.x < -10) p.x = w + 10;
+      if (p.x > w + 10) p.x = -10;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(212, 165, 116, ${alpha})`;
+      ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener('resize', resize);
+  draw();
 }
 
 function closeOnboarding() {
+  onboardingAnimRunning = false;
   dom.onboarding.classList.add('hidden');
   localStorage.setItem('bobby_visited', 'true');
   state.isOnboarded = true;
+  initParticles(); // 启动主粒子系统
   startApp();
 }
 
@@ -222,9 +294,34 @@ function getDayGreeting() {
   return g[Math.floor(Math.random() * g.length)];
 }
 
-function getReply() {
-  const pool = isNight() ? DATA.nightReplies : DATA.dayReplies;
-  return pool[Math.floor(Math.random() * pool.length)];
+function getReply(userText) {
+  const pool = isNight() ? [...DATA.nightReplies] : [...DATA.dayReplies];
+  const text = (userText || '').toLowerCase();
+
+  // 情绪关键词匹配 - 简单但有效
+  const emotionReplies = {
+    sad: ['嗯...', '会好的', '我在', '别想太多', '嗯，我也是'],
+    tired: ['早点休息', '今天辛苦了', '嗯，我也困了', '别撑着'],
+    lonely: ['嗯，我在', '外面好安静', '还没睡呢', '嗯...'],
+    happy: ['嗯', '那就好', '是吗'],
+    late: ['还没睡？', '太晚了', '快睡吧', '嗯...我也睡不着']
+  };
+
+  let candidates = pool;
+
+  if (/累|疲|辛苦|撑不/.test(text)) {
+    candidates = emotionReplies.tired;
+  } else if (/难过|伤心|哭|不想|烦|孤独|寂寞|无聊/.test(text)) {
+    candidates = emotionReplies.sad;
+  } else if (/一个人|没人|没朋友|孤单/.test(text)) {
+    candidates = emotionReplies.lonely;
+  } else if (/开心|高兴|好事|哈哈|开心|太好了/.test(text)) {
+    candidates = emotionReplies.happy;
+  } else if (/睡不着|失眠|醒了/.test(text)) {
+    candidates = emotionReplies.late;
+  }
+
+  return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
 // ===== 事件 =====
@@ -331,7 +428,7 @@ function sendMessage() {
 
   setTimeout(() => {
     hideTyping();
-    const reply = getReply();
+    const reply = getReply(text);
     addMessage(reply, false);
   }, delay);
 }
@@ -472,20 +569,82 @@ function showToast(text) {
   setTimeout(() => dom.toast.classList.remove('show'), 2000);
 }
 
+// ===== 每日新碎片 =====
+// 每次访问生成一条新的碎片，让用户有"回来的理由"
+function checkDailyNote() {
+  const today = new Date().toDateString();
+  const lastNoteDate = localStorage.getItem('bobby_last_note');
+
+  if (lastNoteDate === today) return; // 今天已经生成过了
+
+  const dailyNotes = [
+    '窗外的树好像又长高了一点。',
+    '楼下的流浪猫今天没来。',
+    '耳机线又打结了。',
+    '发现常去的那家店关门了。',
+    '今天阳光很好，但风也很大。',
+    '手机屏碎了好久了，一直没修。',
+    '阳台上的衣服忘了收。',
+    '泡面吃完了最后一包。',
+    '看了一个很老的电影。还行。',
+    '路过一家花店，犹豫了一下没进去。',
+    '今天的月亮特别圆。',
+    '室友带了宵夜回来，很香。',
+    '发现一首很好听的歌，单曲循环了。',
+    '下雨了没带伞，在便利店等了半小时。',
+    '手机相册弹出了去年的今天。',
+    '突然想学吉他。但大概不会真的去。',
+    '便利店阿姨问我怎么天天来。',
+    '公交车上遇到一只很乖的狗。',
+    '今天的晚霞很好看。拍了一张。',
+    '睡不着，数了一下天花板上的裂纹。'
+  ];
+
+  const note = dailyNotes[Math.floor(Math.random() * dailyNotes.length)];
+  const now = new Date();
+  const timeDetail = now.getHours().toString().padStart(2, '0') + ':' +
+                     now.getMinutes().toString().padStart(2, '0');
+
+  // 插入到最前面
+  DATA.notes.unshift({
+    id: Date.now(),
+    text: note,
+    time: '刚刚',
+    timeDetail: timeDetail,
+    likes: 0,
+    liked: false
+  });
+
+  localStorage.setItem('bobby_last_note', today);
+
+  // 刷新显示
+  if (state.currentPage === 'notesPage') loadNotes();
+  if (state.currentPage === 'profilePage') loadProfileNotes();
+}
+
 // ===== 定时更新 =====
 function startScheduler() {
-  // 每分钟更新状态
   setInterval(updateMood, 60000);
+  checkDailyNote();
 }
 
 // ===== 初始化 =====
 function init() {
-  initParticles();
   setupEvents();
   loadGifts();
   loadNotes();
   loadProfileNotes();
-  initOnboarding();
+
+  const visited = localStorage.getItem('bobby_visited');
+  if (visited) {
+    initParticles(); // 只在非首次访问时启动主粒子
+    state.isOnboarded = true;
+    dom.onboarding.classList.add('hidden');
+    startApp();
+  } else {
+    initOnboarding(); // 首次访问只启动引导页粒子
+  }
+
   startScheduler();
 }
 
