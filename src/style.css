@@ -413,6 +413,76 @@ body {
   color: var(--accent);
 }
 
+/* Bobby 的照片消息 */
+.bubble.photo {
+  padding: 0;
+  overflow: hidden;
+}
+
+.photo-frame {
+  width: 200px;
+  height: 140px;
+  background: linear-gradient(135deg, rgba(130,160,200,0.15) 0%, rgba(212,165,116,0.08) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.photo-scene {
+  font-size: 40px;
+  opacity: 0.6;
+}
+
+.photo-caption {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  font-style: italic;
+}
+
+/* Bobby 的语音消息 */
+.bubble.voice {
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 120px;
+}
+
+.voice-bars {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 20px;
+}
+
+.voice-bar {
+  width: 3px;
+  background: rgba(130,160,200,0.5);
+  border-radius: 2px;
+  animation: voicePulse 1.2s ease-in-out infinite;
+}
+
+.voice-bar:nth-child(1) { height: 6px; animation-delay: 0s; }
+.voice-bar:nth-child(2) { height: 12px; animation-delay: 0.1s; }
+.voice-bar:nth-child(3) { height: 8px; animation-delay: 0.2s; }
+.voice-bar:nth-child(4) { height: 16px; animation-delay: 0.3s; }
+.voice-bar:nth-child(5) { height: 10px; animation-delay: 0.4s; }
+.voice-bar:nth-child(6) { height: 14px; animation-delay: 0.5s; }
+.voice-bar:nth-child(7) { height: 7px; animation-delay: 0.6s; }
+
+@keyframes voicePulse {
+  0%, 100% { transform: scaleY(0.5); }
+  50% { transform: scaleY(1); }
+}
+
+.voice-duration {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
 /* 消息元数据（时间 + 已读状态） */
 .msg-meta {
   display: flex;

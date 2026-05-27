@@ -591,34 +591,105 @@ function checkWhisper() {
   // 只在聊天页面且用户静默时触发
   if (state.currentPage !== 'chatPage') return;
 
-  const whispers = isNightNow ? [
-    '还没睡？',
-    '...在吗',
-    '外面好安静',
-    '窗户上有雾气',
-    '困了',
-    '嗯...',
-    '刚洗完澡',
-    '在听一首很好听的歌',
-    '路灯灭了',
-    '月亮挺亮的'
-  ] : [
-    '今天有点冷',
-    '刚下课',
-    '困',
-    '在便利店',
-    '风好大'
-  ];
+  // 50% 概率发碎碎念（自言自语），50% 概率发低语（对你说话）
+  // 其中有 15% 概率发照片，10% 概率发语音
+  const roll = Math.random();
+  const isPhoto = roll < 0.075;
+  const isVoice = roll >= 0.075 && roll < 0.125;
+  const isMutter = roll >= 0.5;
 
-  const msg = whispers[Math.floor(Math.random() * whispers.length)];
+  if (isPhoto) {
+    // Bobby 发送"照片"
+    const photos = isNightNow ? [
+      { scene: '🌙', caption: '月亮挺亮的' },
+      { scene: '🌧️', caption: '窗户上全是水痕' },
+      { scene: '🐱', caption: '它又来了' },
+      { scene: '💡', caption: '路灯下面有只蛾子' },
+      { scene: '☁️', caption: '云走得很快' }
+    ] : [
+      { scene: '☀️', caption: '今天的阳光' },
+      { scene: '🌿', caption: '阳台上的小草' },
+      { scene: '🏪', caption: '便利店阿姨在打瞌睡' },
+      { scene: '🌳', caption: '树叶在晃' }
+    ];
+    const photo = photos[Math.floor(Math.random() * photos.length)];
+    setTimeout(() => {
+      if (state.currentPage === 'chatPage') {
+        addPhotoMessage(photo.scene, photo.caption);
+      }
+    }, 3000 + Math.random() * 5000);
 
-  // Bobby 低语式地出现
-  setTimeout(() => {
-    if (state.currentPage === 'chatPage') {
-      addThought('...');
-      setTimeout(() => addMessage(msg, false), 2000);
-    }
-  }, 5000);
+  } else if (isVoice) {
+    // Bobby 发送"语音"
+    const voiceMsgs = isNightNow ? [
+      '嗯...还没睡',
+      '困了',
+      '外面好安静啊',
+      '在听歌'
+    ] : [
+      '嗯',
+      '刚下课',
+      '在吃饭',
+      '困'
+    ];
+    const msg = voiceMsgs[Math.floor(Math.random() * voiceMsgs.length)];
+    setTimeout(() => {
+      if (state.currentPage === 'chatPage') {
+        addVoiceMessage(msg);
+      }
+    }, 3000 + Math.random() * 5000);
+
+  } else if (isMutter) {
+    // 碎碎念 - Bobby 的自言自语，不是对你说的
+    const mutters = isNightNow ? [
+      '下雨了',
+      '风好大',
+      '路灯灭了',
+      '月亮挺亮的',
+      '隔壁灯也灭了',
+      '猫又来了',
+      '好困...',
+      '窗户上有雾气',
+      '外面好安静'
+    ] : [
+      '今天阳光不错',
+      '树叶在晃',
+      '有点饿了',
+      '困',
+      '风好大'
+    ];
+    const msg = mutters[Math.floor(Math.random() * mutters.length)];
+
+    setTimeout(() => {
+      if (state.currentPage === 'chatPage') {
+        // 碎碎念用内心独白样式，不是消息
+        addThought(msg);
+      }
+    }, 3000 + Math.random() * 5000);
+
+  } else {
+    // 低语 - Bobby 主动跟你说话
+    const whispers = isNightNow ? [
+      '还没睡？',
+      '...在吗',
+      '嗯...',
+      '困了',
+      '嗯'
+    ] : [
+      '今天有点冷',
+      '嗯',
+      '困',
+      '风好大'
+    ];
+    const msg = whispers[Math.floor(Math.random() * whispers.length)];
+
+    setTimeout(() => {
+      if (state.currentPage === 'chatPage') {
+        addThought('...');
+        setTimeout(() => addMessage(msg, false), 2000);
+      }
+    }, 5000);
+  }
 
   state.lastWhisper = now;
   state.whisperCount++;
@@ -992,6 +1063,69 @@ function addThought(text) {
   el.className = 'thought';
   el.innerHTML = `<span>${text}</span>`;
   dom.msgList.appendChild(el);
+}
+
+// Bobby 发送"照片"消息
+function addPhotoMessage(scene, caption) {
+  const id = `msg-${state.msgId++}`;
+  const el = document.createElement('div');
+  el.className = 'msg left new-msg';
+  el.id = id;
+  el.innerHTML = `
+    <div class="avatar"><img src="images/ai-avatar.svg" alt="Bobby" /></div>
+    <div>
+      <div class="bubble photo">
+        <div class="photo-frame"><span class="photo-scene">${scene}</span></div>
+        <div class="photo-caption">${caption}</div>
+      </div>
+      <div class="msg-meta">
+        <span class="msg-time">${formatTimeFriendly(new Date())}</span>
+      </div>
+    </div>
+  `;
+  dom.msgList.appendChild(el);
+  setTimeout(() => {
+    dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
+    el.classList.remove('new-msg');
+  }, 2000);
+}
+
+// Bobby 发送"语音"消息
+function addVoiceMessage(text) {
+  const id = `msg-${state.msgId++}`;
+  const duration = Math.floor(Math.random() * 5) + 2; // 2-6秒
+  const el = document.createElement('div');
+  el.className = 'msg left new-msg';
+  el.id = id;
+  el.innerHTML = `
+    <div class="avatar"><img src="images/ai-avatar.svg" alt="Bobby" /></div>
+    <div>
+      <div class="bubble voice">
+        <div class="voice-bars">
+          <div class="voice-bar"></div><div class="voice-bar"></div><div class="voice-bar"></div>
+          <div class="voice-bar"></div><div class="voice-bar"></div><div class="voice-bar"></div>
+          <div class="voice-bar"></div>
+        </div>
+        <span class="voice-duration">${duration}"</span>
+      </div>
+      <div class="msg-meta">
+        <span class="msg-time">${formatTimeFriendly(new Date())}</span>
+      </div>
+    </div>
+  `;
+  dom.msgList.appendChild(el);
+  setTimeout(() => {
+    dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
+    el.classList.remove('new-msg');
+  }, 2000);
+  // 3秒后显示文字内容
+  setTimeout(() => {
+    const bubble = el.querySelector('.bubble');
+    if (bubble) {
+      bubble.className = 'bubble';
+      bubble.innerHTML = text;
+    }
+  }, 3000 + duration * 500);
 }
 
 function showTyping() {
