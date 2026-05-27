@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Message = require('../models/Message');
 const BobbyState = require('../models/BobbyState');
 const aiService = require('../services/aiService');
+const { MemoryService } = require('../services/memoryService');
 
 // Bobby 的碎片素材
 const DAILY_NOTES = [
@@ -62,6 +63,19 @@ function startJobs(bobbyEngine, io) {
       await bobbyEngine.updateStatus();
     } catch (err) {
       console.error('状态更新失败:', err.message);
+    }
+  });
+
+  // ===== 每 30 分钟：Reverie（沉思周期）=====
+  cron.schedule('*/30 * * * *', async () => {
+    try {
+      if (!bobbyEngine.cognitive) return;
+      const thought = await bobbyEngine.cognitive.reverie();
+      if (thought) {
+        console.log(`Bobby 沉思: ${thought}`);
+      }
+    } catch (err) {
+      console.error('沉思周期失败:', err.message);
     }
   });
 
@@ -173,8 +187,43 @@ function startJobs(bobbyEngine, io) {
     }
   });
 
-  // ===== 每天凌晨清理旧消息（保留最近100条/用户）=====
+  // ===== 每天凌晨 3 点：Consolidation（整合周期）=====
+  cron.schedule('0 3 * * *', async () => {
+    try {
+      if (!bobbyEngine.cognitive) return;
+      const note = await bobbyEngine.cognitive.consolidation();
+      if (note) {
+        console.log(`Bobby 深夜整合: ${note.content}`);
+
+        // 通知在线用户
+        if (io) {
+          io.emit('new_note', {
+            content: note.content,
+            timeDetail: note.timeDetail,
+            type: 'daily'
+          });
+        }
+      }
+    } catch (err) {
+      console.error('整合周期失败:', err.message);
+    }
+  });
+
+  // ===== 每天凌晨 4 点：Dream-time Compute（记忆衰减 + 整合）=====
   cron.schedule('0 4 * * *', async () => {
+    try {
+      const users = await User.find().select('_id').lean();
+      for (const user of users) {
+        await MemoryService.dreamTimeCompute(user._id);
+      }
+      console.log('Dream-time 记忆衰减完成');
+    } catch (err) {
+      console.error('Dream-time 失败:', err.message);
+    }
+  });
+
+  // ===== 每天凌晨 4:30 清理旧消息（保留最近100条/用户）=====
+  cron.schedule('30 4 * * *', async () => {
     try {
       const users = await User.find().select('_id').lean();
       for (const user of users) {
@@ -193,7 +242,18 @@ function startJobs(bobbyEngine, io) {
     }
   });
 
-  console.log('定时任务已启动');
+  // ===== 每小时持久化一次情绪状态 =====
+  cron.schedule('0 * * * *', async () => {
+    try {
+      if (bobbyEngine.emotion && bobbyEngine.state) {
+        await bobbyEngine._persistEmotion();
+      }
+    } catch (err) {
+      console.error('情绪持久化失败:', err.message);
+    }
+  });
+
+  console.log('定时任务已启动（含认知循环 + 记忆衰减）');
 }
 
 module.exports = startJobs;

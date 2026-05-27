@@ -33,9 +33,6 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// ===== 数据库 =====
-connectDB();
-
 // ===== Socket.io =====
 io.on('connection', (socket) => {
   console.log(`用户连接: ${socket.id}`);
@@ -68,22 +65,33 @@ app.use('/api/notes', noteRoutes);
 app.use('/api/gifts', giftRoutes);
 app.use('/api/user', userRoutes);
 
-// ===== Bobby 引擎 =====
-const bobbyEngine = new BobbyEngine(io);
-app.set('bobbyEngine', bobbyEngine);
-
-// ===== 定时任务 =====
-startJobs(bobbyEngine, io);
-
 // ===== 健康检查 =====
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
-// ===== 启动 =====
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Bobby 后端运行在端口 ${PORT}`);
+// ===== 启动（异步初始化）=====
+async function start() {
+  // 先连接数据库
+  await connectDB();
+
+  // Bobby 引擎（需要数据库连接后初始化）
+  const bobbyEngine = new BobbyEngine(io);
+  await bobbyEngine.init();
+  app.set('bobbyEngine', bobbyEngine);
+
+  // 定时任务（依赖 bobbyEngine 初始化完成）
+  startJobs(bobbyEngine, io);
+
+  const PORT = process.env.PORT || 3000;
+  server.listen(PORT, () => {
+    console.log(`Bobby 后端运行在端口 ${PORT}`);
+  });
+}
+
+start().catch(err => {
+  console.error('启动失败:', err);
+  process.exit(1);
 });
 
 module.exports = { app, server, io };

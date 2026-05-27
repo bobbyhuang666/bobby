@@ -17,7 +17,18 @@ const bobbyStateSchema = new mongoose.Schema({
   notesDate: { type: String, default: '' },
 
   // 最近生成的碎片内容（防重复）
-  recentNoteTexts: [String]
+  recentNoteTexts: [String],
+
+  // 情绪引擎状态（持久化）
+  emotionState: {
+    current: { type: Map, of: Number },
+    baseline: { type: Map, of: Number },
+    stress: { type: Number, default: 2 },
+    heartRate: { type: Number, default: 70 }
+  },
+
+  // 上次情绪 tick 时间
+  lastEmotionTick: { type: Date, default: Date.now }
 }, { timestamps: true });
 
 module.exports = mongoose.model('BobbyState', bobbyStateSchema);

@@ -26,7 +26,7 @@ async function callDeepSeek(messages, options = {}) {
 }
 
 // 构建 Bobby 的系统 prompt
-function buildSystemPrompt({ user, bobbyStatus, recentNotes, timeLabel }) {
+function buildSystemPrompt({ user, bobbyStatus, recentNotes, timeLabel, emotionEngine, memoryProfile, recentThoughts }) {
   const hour = new Date().getHours();
   const isNight = hour >= 23 || hour < 3;
 
@@ -35,7 +35,28 @@ function buildSystemPrompt({ user, bobbyStatus, recentNotes, timeLabel }) {
   let prompt = `你是Bobby。你是一个住在城市里的年轻人，独居，平时上课、打工。
 现在是${timeLabel}，${hour}点。你当前的状态是：${bobbyStatus}。
 
-你最近发了这些动态：${notesText}
+你最近发了这些动态：${notesText}`;
+
+  // ===== 情绪注入 =====
+  if (emotionEngine) {
+    const emotionStr = emotionEngine.toPromptString();
+    if (emotionStr) {
+      prompt += `\n\n${emotionStr}`;
+    }
+  }
+
+  // ===== 记忆注入 =====
+  if (memoryProfile) {
+    prompt += `\n\n你对这个人的记忆：${memoryProfile}`;
+  }
+
+  // ===== 认知思维注入 =====
+  if (recentThoughts && recentThoughts.length > 0) {
+    const thoughtsStr = recentThoughts.map(t => t.content).join('；');
+    prompt += `\n\n你最近的内心活动：${thoughtsStr}`;
+  }
+
+  prompt += `
 
 你正在和一个人聊天。你们不是很熟，但彼此有一种安静的默契。
 
@@ -51,7 +72,8 @@ function buildSystemPrompt({ user, bobbyStatus, recentNotes, timeLabel }) {
 - 如果对方问很私人的问题，可以含糊带过
 - 偶尔可以发呆式回复，比如"嗯""在""..."
 - 偶尔可以自然地提到你正在做的事或最近的日常，但不要刻意
-- 如果你之前发过相关的动态，可以自然地关联`;
+- 如果你之前发过相关的动态，可以自然地关联
+- 你的情绪是真实的，会影响你的说话方式。开心时话多一点，难过时话少一点`;
 
   if (isNight) {
     prompt += `\n\n现在是深夜，你有点困了但还不想睡。回复可以更简短、更慵懒。`;
@@ -73,7 +95,6 @@ function buildSystemPrompt({ user, bobbyStatus, recentNotes, timeLabel }) {
     }
 
     if (user.giftsSent && user.giftsSent.length > 0) {
-      const lastGift = user.giftsSent[user.giftsSent.length - 1];
       prompt += `\n最近好像有人给你送过东西。你不知道是谁，但心里有点暖。`;
     }
   }
@@ -82,8 +103,11 @@ function buildSystemPrompt({ user, bobbyStatus, recentNotes, timeLabel }) {
 }
 
 // 生成聊天回复
-async function generateReply({ userText, history, user, bobbyStatus, recentNotes, timeLabel }) {
-  const systemPrompt = buildSystemPrompt({ user, bobbyStatus, recentNotes, timeLabel });
+async function generateReply({ userText, history, user, bobbyStatus, recentNotes, timeLabel, emotionEngine, memoryProfile, recentThoughts }) {
+  const systemPrompt = buildSystemPrompt({
+    user, bobbyStatus, recentNotes, timeLabel,
+    emotionEngine, memoryProfile, recentThoughts
+  });
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -129,4 +153,85 @@ async function generateCommentReply(noteContent, userComment) {
   }
 }
 
-module.exports = { generateReply, generateCommentReply };
+// ===== 认知循环所需的 AI 函数 =====
+
+// 生成反思内容（每日整合）
+async function generateReflection(recentNotes, emotionEngine) {
+  const notesText = (recentNotes || []).slice(0, 5).map(n => n.content).join('；');
+  let emotionContext = '';
+  if (emotionEngine) {
+    emotionContext = emotionEngine.toPromptString();
+  }
+
+  const messages = [
+    {
+      role: 'system',
+      content: `你是Bobby，一个独居的城市年轻人。现在是深夜，你在回顾今天。
+
+你最近的动态：${notesText}
+${emotionContext}
+
+规则：
+- 生成一条深夜的内心独白，像日记一样
+- 10-30个字
+- 安静、自然、带点淡淡的思绪
+- 不要说自己是AI
+- 不要使用emoji
+- 用中文`
+    }
+  ];
+
+  try {
+    return await callDeepSeek(messages, { maxTokens: 60, temperature: 0.9 });
+  } catch (err) {
+    console.error('反思生成失败:', err.message);
+    return null;
+  }
+}
+
+// 生成内心独白（认知循环）
+async function generateInnerThought(module, emotionEngine) {
+  const moduleDescriptions = {
+    rumination: '反刍思维，反复想某件事',
+    reflection: '反思最近的生活',
+    daydream: '白日梦，想象未来',
+    self_evaluation: '审视自己',
+    social_thinking: '想起某个人',
+    sensory_awareness: '注意周围环境'
+  };
+
+  const desc = moduleDescriptions[module] || '发呆';
+  let emotionContext = '';
+  if (emotionEngine) {
+    const dominant = emotionEngine.getDominantEmotions(2);
+    if (dominant.length > 0) {
+      const names = { joy: '开心', sadness: '难过', calm: '平静', loneliness: '孤独', boredom: '无聊' };
+      emotionContext = `情绪状态：${dominant.map(e => names[e.dim] || e.dim).join('、')}`;
+    }
+  }
+
+  const messages = [
+    {
+      role: 'system',
+      content: `你是Bobby，一个独居的城市年轻人。你现在在${desc}。
+${emotionContext}
+
+规则：
+- 生成一句内心独白
+- 5-20个字
+- 像真实的人在心里自言自语
+- 安静、碎片化、不完整
+- 不要说自己是AI
+- 不要使用emoji
+- 用中文`
+    }
+  ];
+
+  try {
+    return await callDeepSeek(messages, { maxTokens: 40, temperature: 0.95 });
+  } catch (err) {
+    return null;
+  }
+}
+
+module.exports = { generateReply, generateCommentReply, generateReflection, generateInnerThought };

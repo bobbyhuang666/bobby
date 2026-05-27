@@ -3,6 +3,9 @@ const Note = require('../models/Note');
 const User = require('../models/User');
 const BobbyState = require('../models/BobbyState');
 const aiService = require('./aiService');
+const { EmotionEngine } = require('./emotionEngine');
+const { MemoryService } = require('./memoryService');
+const { CognitiveLoop } = require('./cognitiveLoop');
 
 // 状态机定义
 const STATE_MACHINE = {
@@ -55,6 +58,8 @@ class BobbyEngine {
   constructor(io) {
     this.io = io;
     this.state = null;
+    this.emotion = null;  // 情绪引擎实例
+    this.cognitive = null; // 认知循环实例
   }
 
   // 初始化 Bobby 状态
@@ -64,7 +69,55 @@ class BobbyEngine {
       state = await BobbyState.create({});
     }
     this.state = state;
+
+    // 从持久化数据恢复情绪引擎
+    if (state.emotionState && state.emotionState.current) {
+      const emotionData = {
+        current: {},
+        baseline: {},
+        stress: state.emotionState.stress || 2,
+        heartRate: state.emotionState.heartRate || 70
+      };
+      // Map 转普通对象
+      if (state.emotionState.current instanceof Map) {
+        state.emotionState.current.forEach((v, k) => { emotionData.current[k] = v; });
+      } else {
+        Object.assign(emotionData.current, state.emotionState.current || {});
+      }
+      if (state.emotionState.baseline instanceof Map) {
+        state.emotionState.baseline.forEach((v, k) => { emotionData.baseline[k] = v; });
+      } else {
+        Object.assign(emotionData.baseline, state.emotionState.baseline || {});
+      }
+      this.emotion = EmotionEngine.fromJSON(emotionData);
+    } else {
+      this.emotion = new EmotionEngine();
+    }
+
+    // 恢复后立即执行一次 tick，补偿离线时间
+    const hoursSinceLastTick = state.lastEmotionTick
+      ? (Date.now() - state.lastEmotionTick.getTime()) / 3600000
+      : 0.5;
+    this.emotion.tick('', Math.min(hoursSinceLastTick, 24)); // 最多补偿24小时
+
+    // 初始化认知循环
+    this.cognitive = new CognitiveLoop(this.emotion, this);
+
     this.updateStatus();
+  }
+
+  // 持久化情绪状态到数据库
+  async _persistEmotion() {
+    if (!this.state || !this.emotion) return;
+    const data = this.emotion.toJSON();
+    this.state.emotionState = {
+      current: data.current,
+      baseline: data.baseline,
+      stress: data.stress,
+      heartRate: data.heartRate
+    };
+    this.state.lastEmotionTick = new Date();
+    await this.state.save();
   }
 
   // 获取当前时段
@@ -141,13 +194,37 @@ class BobbyEngine {
       batchId
     });
 
-    // 更新用户记忆
+    // 更新用户记忆（旧版简单记忆，保留兼容）
     user.lastTopic = text.slice(0, 50);
     if (/累|疲|辛苦/.test(text)) user.mood = 'tired';
     else if (/难过|伤心|哭|烦/.test(text)) user.mood = 'sad';
     else if (/开心|高兴|哈哈/.test(text)) user.mood = 'happy';
     else if (/睡不着|失眠/.test(text)) user.mood = 'insomnia';
     await user.save();
+
+    // ===== 情绪引擎：每次交互 tick =====
+    const hoursSinceLastTick = this.state.lastEmotionTick
+      ? (Date.now() - this.state.lastEmotionTick.getTime()) / 3600000
+      : 0.5;
+    this.emotion.tick(text, Math.min(hoursSinceLastTick, 4));
+
+    // 记忆学习放在生成回复之后（需要同时传入用户文本和 Bobby 回复）
+
+    // ===== 记忆服务：检索相关记忆 =====
+    let memoryProfile = '';
+    try {
+      const memories = await MemoryService.retrieve(userId, text, 3);
+      if (memories.length > 0) {
+        memoryProfile = memories.map(m => m.content).join('；');
+      }
+      // 获取用户画像
+      const profile = await MemoryService.getUserProfile(userId);
+      if (profile) {
+        memoryProfile = memoryProfile ? `${profile}\n相关记忆：${memoryProfile}` : profile;
+      }
+    } catch (err) {
+      console.error('记忆检索失败:', err.message);
+    }
 
     // 生成回复
     const recentMessages = await Message.find({ userId })
@@ -166,7 +243,10 @@ class BobbyEngine {
       user,
       bobbyStatus: this.state.currentStatus,
       recentNotes,
-      timeLabel: this.getTimeLabel()
+      timeLabel: this.getTimeLabel(),
+      emotionEngine: this.emotion,
+      memoryProfile,
+      recentThoughts: this.cognitive ? this.cognitive.getRecentThoughts() : []
     });
 
     // 保存 Bobby 回复
@@ -181,6 +261,20 @@ class BobbyEngine {
     // 增加好感度
     const upgraded = user.addIntimacy(1);
     await user.save();
+
+    // ===== 记忆服务：从 Bobby 的回复中也学习 =====
+    try {
+      await MemoryService.learnFromConversation(userId, text, reply);
+    } catch (err) {
+      // 静默失败
+    }
+
+    // ===== 持久化情绪状态 =====
+    try {
+      await this._persistEmotion();
+    } catch (err) {
+      console.error('情绪状态持久化失败:', err.message);
+    }
 
     return { reply: msg, upgraded, intimacyLevel: user.getIntimacyLevel() };
   }
@@ -198,6 +292,11 @@ class BobbyEngine {
     // 好感度 +2
     user.addIntimacy(2);
     await user.save();
+
+    // 情绪感染（评论也会影响 Bobby 的情绪）
+    if (this.emotion) {
+      this.emotion.tick(commentText, 0);
+    }
 
     // Bobby 有概率回复（基于好感度）
     const replyChance = Math.min(0.9, 0.5 + user.intimacy * 0.004);
