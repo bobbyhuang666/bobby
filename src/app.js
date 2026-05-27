@@ -395,7 +395,10 @@ const state = {
   giftReceived: [], // 收到的礼物
   intimacy: 0,      // 好感度 (0-100)
   lastWhisper: 0,   // 上次主动消息时间
-  whisperCount: 0   // 今天主动消息次数
+  whisperCount: 0,  // 今天主动消息次数
+  unreadMsgIds: [], // 所有未读用户消息 ID
+  isProcessing: false, // Bobby 正在处理消息
+  batchTimer: null    // 消息批量计时器
 };
 
 // ===== DOM =====
@@ -1106,8 +1109,8 @@ function addMessage(text, isUser) {
         <span class="msg-status" data-id="${id}">已发送</span>
       </div>
     `;
-    // 记录最新用户消息 ID，供 sendMessage 在开始思考时标记已读
-    state.lastUserMsgId = id;
+    // 记录未读用户消息 ID
+    state.unreadMsgIds.push(id);
   } else {
     el.className += ' new-msg';
     el.innerHTML = `
@@ -1137,6 +1140,12 @@ function markAsRead(msgId) {
     statusEl.textContent = '已读';
     statusEl.classList.add('read');
   }
+}
+
+// 标记所有未读消息为已读
+function markAllAsRead() {
+  state.unreadMsgIds.forEach(id => markAsRead(id));
+  state.unreadMsgIds = [];
 }
 
 function addThought(text) {
@@ -1218,47 +1227,110 @@ function hideTyping() {
   dom.typing.classList.remove('show');
 }
 
-async function sendMessage() {
+// 待处理的消息队列
+let pendingMessages = [];
+
+function sendMessage() {
   const text = dom.inputBox.value.trim();
   if (!text) return;
 
   addMessage(text, true);
   updateMemory(text);
+  pendingMessages.push(text);
   dom.inputBox.value = '';
   dom.sendBtn.disabled = true;
   dom.sendBtn.classList.remove('active');
 
-  // Bobby 的回复延迟 - 不秒回
-  const delay = isNight()
-    ? 1000 + Math.random() * 2000   // 深夜 1-3秒
-    : 2000 + Math.random() * 3000;  // 白天 2-5秒
+  // 如果 Bobby 正在处理上一批消息，不重新触发
+  if (state.isProcessing) return;
 
-  // 先等一小段再显示"正在输入"，模拟 Bobby 看到消息的过程
+  // 重置批量计时器：等用户发完消息再处理
+  if (state.batchTimer) clearTimeout(state.batchTimer);
+
+  // 深夜等得短（3-5秒），白天等得长（4-8秒）
+  const batchWindow = isNight()
+    ? 3000 + Math.random() * 2000
+    : 4000 + Math.random() * 4000;
+
+  state.batchTimer = setTimeout(() => processBatch(), batchWindow);
+}
+
+async function processBatch() {
+  if (pendingMessages.length === 0) return;
+
+  state.isProcessing = true;
+  const batch = [...pendingMessages];
+  pendingMessages = [];
+
+  // Bobby "看到了"——标记所有消息已读
   const seeDelay = isNight()
-    ? 500 + Math.random() * 1000    // 深夜看到得快
-    : 2000 + Math.random() * 3000;  // 白天看到得慢
+    ? 500 + Math.random() * 1000
+    : 1500 + Math.random() * 2500;
   await new Promise(r => setTimeout(r, seeDelay));
+  markAllAsRead();
 
-  // Bobby "看到了"——标记已读
-  if (state.lastUserMsgId) {
-    markAsRead(state.lastUserMsgId);
+  // 决定回复几条——像真人一样不固定
+  const replyCount = decideReplyCount(batch.length);
+  const allText = batch.join('\n');
+
+  if (replyCount === 0) {
+    // Bobby 看了但不回（偶尔沉默更真实）
+    state.isProcessing = false;
+    return;
   }
 
-  showTyping();
+  for (let i = 0; i < replyCount; i++) {
+    // 如果有多条回复，中间间隔 2-6 秒
+    if (i > 0) {
+      await new Promise(r => setTimeout(r, 2000 + Math.random() * 4000));
+    }
 
-  // 先等待"思考时间"
-  await new Promise(r => setTimeout(r, delay));
-  hideTyping();
+    const thinkDelay = isNight()
+      ? 1000 + Math.random() * 2000
+      : 2000 + Math.random() * 3000;
 
-  // 创建流式气泡，开始接收API回复
-  createStreamingBubble();
+    showTyping();
+    await new Promise(r => setTimeout(r, thinkDelay));
+    hideTyping();
 
-  try {
-    const reply = await callDeepSeek(text);
-    finalizeStreamingBubble(reply);
-  } catch (e) {
-    finalizeStreamingBubble('嗯');
+    createStreamingBubble();
+
+    try {
+      // 多条回复时，每条只传最后一条用户消息（模拟真人不逐条回）
+      const contextText = (i === 0) ? allText : batch[batch.length - 1];
+      const reply = await callDeepSeek(contextText);
+      finalizeStreamingBubble(reply);
+    } catch (e) {
+      finalizeStreamingBubble('嗯');
+    }
   }
+
+  state.isProcessing = false;
+}
+
+// 决定回复数量——像真人一样不可预测
+function decideReplyCount(userMsgCount) {
+  const r = Math.random();
+
+  if (userMsgCount >= 3) {
+    // 用户发了3条以上：大概率只回1条，小概率2条，很小概率不回
+    if (r < 0.1) return 0;        // 10% 不回（在忙）
+    if (r < 0.75) return 1;       // 65% 回1条
+    if (r < 0.92) return 2;       // 17% 回2条
+    return 3;                      // 8% 回3条
+  }
+
+  if (userMsgCount === 2) {
+    // 用户发了2条：可能回1条也可能回2条
+    if (r < 0.05) return 0;       // 5% 不回
+    if (r < 0.65) return 1;       // 60% 回1条
+    return 2;                      // 35% 回2条
+  }
+
+  // 用户只发了1条
+  if (r < 0.05) return 0;         // 5% 不回
+  if (r < 0.75) return 1;         // 70% 回1条
+  return 2;                        // 25% 回2条
 }
 
 function saveMessages() {
