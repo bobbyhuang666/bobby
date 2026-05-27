@@ -1200,6 +1200,101 @@ body {
   transform: translateX(-50%) translateY(0);
 }
 
+/* ===== 关系卡片 ===== */
+.relationship-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.relationship-panel.show {
+  display: flex;
+  animation: fadeIn 0.3s ease;
+}
+
+.relationship-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(8px);
+}
+
+.relationship-card {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  background: linear-gradient(180deg, #141428 0%, #0a0a1a 100%);
+  border: 1px solid rgba(212,165,116,0.2);
+  border-radius: 24px;
+  padding: 32px 24px;
+  text-align: center;
+  animation: fadeInUp 0.4s ease;
+}
+
+.relationship-card-header {
+  margin-bottom: 24px;
+}
+
+.relationship-card-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.relationship-card-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+}
+
+.relationship-card-stats {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 24px;
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.rc-stat {
+  text-align: center;
+}
+
+.rc-stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.rc-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+}
+
+.relationship-card-quote {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-style: italic;
+  line-height: 1.6;
+  margin-bottom: 20px;
+  letter-spacing: 0.5px;
+}
+
+.relationship-card-footer {
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 2px;
+}
+
 /* ===== VIP 系统 ===== */
 .vip-card {
   display: flex;

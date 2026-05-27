@@ -1729,6 +1729,39 @@ function hideVipPanel() {
   if (panel) panel.classList.remove('show');
 }
 
+// 关系卡片
+function showRelationshipCard() {
+  const panel = document.getElementById('relationshipPanel');
+  if (!panel) return;
+
+  // 计算相遇天数
+  const firstVisit = localStorage.getItem('bobby_first_visit');
+  if (!firstVisit) {
+    localStorage.setItem('bobby_first_visit', new Date().toISOString());
+  }
+  const days = firstVisit
+    ? Math.max(1, Math.floor((Date.now() - new Date(firstVisit).getTime()) / 86400000) + 1)
+    : 1;
+
+  // 更新统计
+  const daysEl = document.getElementById('rcDays');
+  const msgsEl = document.getElementById('rcMessages');
+  const levelEl = document.getElementById('rcLevel');
+  const subtitleEl = document.getElementById('rcSubtitle');
+
+  if (daysEl) daysEl.textContent = days;
+  if (msgsEl) msgsEl.textContent = state.messages.length;
+  if (levelEl) levelEl.textContent = getIntimacyLevel().name;
+  if (subtitleEl) subtitleEl.textContent = DATA.taglines[0] || '深夜才会上线的存在';
+
+  panel.classList.add('show');
+}
+
+function hideRelationshipCard() {
+  const panel = document.getElementById('relationshipPanel');
+  if (panel) panel.classList.remove('show');
+}
+
 function sendGift(giftId) {
   const gift = DATA.gifts.find(g => g.id === giftId);
   if (!gift) return;

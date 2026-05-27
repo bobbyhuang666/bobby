@@ -191,6 +191,13 @@
           </div>
           <span class="gift-entry-arrow">›</span>
         </div>
+
+        <!-- 关系卡片入口 -->
+        <div class="gift-entry" onclick="showRelationshipCard()" style="margin-bottom: 24px;">
+          <span class="gift-entry-icon">📋</span>
+          <span class="gift-entry-text">我们的关系</span>
+          <span class="gift-entry-arrow">›</span>
+        </div>
       </div>
 
       <div class="tab-bar">
@@ -261,6 +268,39 @@
       <div class="gift-success-content">
         <div class="gift-success-emoji" id="giftSuccessEmoji"></div>
         <p class="gift-success-text">已悄悄送出</p>
+      </div>
+    </div>
+
+    <!-- 关系卡片面板 -->
+    <div class="relationship-panel" id="relationshipPanel" onclick="hideRelationshipCard()">
+      <div class="relationship-card" onclick="event.stopPropagation()" id="relationshipCardContent">
+        <div class="relationship-card-header">
+          <div class="breathing-avatar large">
+            <img src="images/avatar.svg" alt="Bobby" />
+          </div>
+          <h3 class="relationship-card-title">Bobby</h3>
+          <div class="relationship-card-subtitle" id="rcSubtitle">深夜才会上线的存在</div>
+        </div>
+        <div class="relationship-card-stats">
+          <div class="rc-stat">
+            <div class="rc-stat-value" id="rcDays">1</div>
+            <div class="rc-stat-label">相遇天数</div>
+          </div>
+          <div class="rc-stat">
+            <div class="rc-stat-value" id="rcMessages">0</div>
+            <div class="rc-stat-label">对话数</div>
+          </div>
+          <div class="rc-stat">
+            <div class="rc-stat-value" id="rcLevel">陌生</div>
+            <div class="rc-stat-label">关系</div>
+          </div>
+        </div>
+        <div class="relationship-card-quote">
+          "缺席创造挂念。留白产生羁绊。"
+        </div>
+        <div class="relationship-card-footer">
+          Bobby · 存在物形式低压AI陪伴
+        </div>
       </div>
     </div>
 
