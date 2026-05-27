@@ -8,7 +8,7 @@ const router = express.Router();
 // 获取用户信息
 router.get('/profile', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.userId).lean();
+    const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ error: '用户不存在' });
 
     const messageCount = await Message.countDocuments({ userId: req.userId });
