@@ -75,8 +75,14 @@ function buildSystemPrompt() {
   // 礼物记忆
   if (state.giftReceived.length > 0) {
     const recentGift = state.giftReceived[state.giftReceived.length - 1];
-    const giftName = { coffee: '咖啡', medicine: '感冒药', taxi: '打车券', book: '书', blanket: '毯子', food: '宵夜' }[recentGift] || '东西';
-    prompt += `\n最近好像有人给你送了${giftName}。你不知道是谁，但心里有点暖。`;
+    const giftInfo = DATA.gifts.find(g => g.id === recentGift);
+    const giftName = giftInfo ? giftInfo.name : '东西';
+
+    if (giftInfo && giftInfo.type === 'bad') {
+      prompt += `\n最近好像有人给你送了${giftName}。你不知道是谁。有点莫名其妙，但又觉得好笑。`;
+    } else {
+      prompt += `\n最近好像有人给你送了${giftName}。你不知道是谁，但心里有点暖。`;
+    }
   }
 
   return prompt;
@@ -241,25 +247,75 @@ const DATA = {
     { id: 16, text: '室友今天很安静。不知道怎么了。', time: '一周前', timeDetail: '23:00', likes: 2, liked: false, comments: [] }
   ],
 
-  // 礼物
+  // 礼物 - 好的和倒霉的混在一起
   gifts: [
-    { id: 'coffee', emoji: '☕', name: '咖啡', price: 100 },
-    { id: 'medicine', emoji: '💊', name: '感冒药', price: 200 },
-    { id: 'taxi', emoji: '🚕', name: '打车券', price: 500 },
-    { id: 'book', emoji: '📖', name: '一本书', price: 300 },
-    { id: 'blanket', emoji: '🧸', name: '毯子', price: 150 },
-    { id: 'food', emoji: '🍜', name: '宵夜', price: 250 }
+    { id: 'coffee', emoji: '☕', name: '咖啡', price: 100, type: 'good' },
+    { id: 'medicine', emoji: '💊', name: '感冒药', price: 200, type: 'good' },
+    { id: 'taxi', emoji: '🚕', name: '打车券', price: 500, type: 'good' },
+    { id: 'book', emoji: '📖', name: '一本书', price: 300, type: 'good' },
+    { id: 'blanket', emoji: '🧸', name: '毯子', price: 150, type: 'good' },
+    { id: 'food', emoji: '🍜', name: '宵夜', price: 250, type: 'good' },
+    { id: 'luckbox', emoji: '📦', name: '神秘包裹', price: 188, type: 'random' },
+    { id: 'banana', emoji: '🍌', name: '香蕉', price: 50, type: 'bad' },
+    { id: 'alarm', emoji: '⏰', name: '十个闹钟', price: 88, type: 'bad' },
+    { id: 'homework', emoji: '📝', name: '一套卷子', price: 66, type: 'bad' },
+    { id: 'rain', emoji: '🌧️', name: '求雨符', price: 99, type: 'bad' },
+    { id: 'rock', emoji: '🪨', name: '一块石头', price: 10, type: 'bad' }
   ],
 
-  // 礼物效果 - 更含蓄、更有画面感
+  // 礼物效果 - 好的和倒霉的
   giftEffects: {
     coffee: '嗯...好像清醒了一点',
     medicine: '鼻子通了，终于',
     taxi: '到了。不用挤地铁了',
     book: '在看一本新的，还不错',
     blanket: '暖和了，好困',
-    food: '饱了。谢谢...不知道该谢谁'
+    food: '饱了。谢谢...不知道该谢谁',
+    luckbox: '......这是什么',
+    banana: '踩到了。滑了一跤',
+    alarm: '......谁放的。吵死了',
+    homework: '......写不完。太多了',
+    rain: '......下雨了。没带伞',
+    rock: '......谁放的石头。踢到脚了'
   },
+
+  // 倒霉礼物的后续反应
+  badLuckReactions: {
+    banana: [
+      '...裤子脏了',
+      '刚洗的衣服...',
+      '今天果然不宜出门'
+    ],
+    alarm: [
+      '响了十个。人都傻了',
+      '耳朵还在嗡嗡响',
+      '再也不想听到闹钟了'
+    ],
+    homework: [
+      '写到一半睡着了',
+      '题目太难了...',
+      '笔都写没水了'
+    ],
+    rain: [
+      '全身湿透了',
+      '鞋子里面全是水',
+      '感冒了...'
+    ],
+    rock: [
+      '脚趾头疼',
+      '走路一瘸一拐的',
+      '新鞋也踢坏了'
+    ]
+  },
+
+  // 神秘包裹随机效果
+  luckboxEffects: [
+    { type: 'good', status: '捡到钱了。今天运气不错', msg: '嗯？地上有钱...' },
+    { type: 'good', status: '收到一张明信片。不知道谁寄的', msg: '有张明信片...' },
+    { type: 'bad', status: '打开是空的...', msg: '...空的' },
+    { type: 'bad', status: '里面是一只蟑螂', msg: '......' },
+    { type: 'good', status: '是一颗糖。还不错', msg: '嗯...甜的' }
+  ],
 
   // 状态机 - 每个状态只能跳转到相邻状态
   stateMachine: {
@@ -1050,11 +1106,8 @@ function addMessage(text, isUser) {
         <span class="msg-status" data-id="${id}">已发送</span>
       </div>
     `;
-    // Bobby "已读"消息 - 深夜快，白天慢
-    const readDelay = isNight()
-      ? 1000 + Math.random() * 2000
-      : 5000 + Math.random() * 10000;
-    setTimeout(() => markAsRead(id), readDelay);
+    // 记录最新用户消息 ID，供 sendMessage 在开始思考时标记已读
+    state.lastUserMsgId = id;
   } else {
     el.className += ' new-msg';
     el.innerHTML = `
@@ -1179,6 +1232,17 @@ async function sendMessage() {
   const delay = isNight()
     ? 1000 + Math.random() * 2000   // 深夜 1-3秒
     : 2000 + Math.random() * 3000;  // 白天 2-5秒
+
+  // 先等一小段再显示"正在输入"，模拟 Bobby 看到消息的过程
+  const seeDelay = isNight()
+    ? 500 + Math.random() * 1000    // 深夜看到得快
+    : 2000 + Math.random() * 3000;  // 白天看到得慢
+  await new Promise(r => setTimeout(r, seeDelay));
+
+  // Bobby "看到了"——标记已读
+  if (state.lastUserMsgId) {
+    markAsRead(state.lastUserMsgId);
+  }
 
   showTyping();
 
@@ -1412,8 +1476,9 @@ async function submitComment(noteId) {
   // 保存评论到 localStorage
   saveComments();
 
-  // Bobby 有 35% 的概率回复评论
-  const willReply = Math.random() < 0.35;
+  // Bobby 回复评论的概率 - 基于好感度，基础70%，最高90%
+  const replyChance = Math.min(0.9, 0.5 + state.intimacy * 0.004);
+  const willReply = Math.random() < replyChance;
 
   if (willReply) {
     // 显示"正在输入"状态
@@ -1702,10 +1767,10 @@ function updateMomentCard() {
 // ===== 礼物 =====
 function loadGifts() {
   dom.giftGrid.innerHTML = DATA.gifts.map(g => `
-    <div class="gift-item" onclick="sendGift('${g.id}')">
+    <div class="gift-item ${g.type === 'bad' ? 'gift-bad' : ''}" onclick="sendGift('${g.id}')">
       <span class="gift-emoji">${g.emoji}</span>
       <span class="gift-name">${g.name}</span>
-      <span class="gift-price">¥${g.price}</span>
+      <span class="gift-price">${g.type === 'bad' ? '???' : '¥' + g.price}</span>
     </div>
   `).join('');
 }
@@ -1770,7 +1835,9 @@ function sendGift(giftId) {
 
   // 记录礼物
   state.giftReceived.push(giftId);
-  addIntimacy(5); // 送礼加5点好感
+  // 倒霉礼物好感度加得少，但不是0——Bobby 知道有人在
+  const intimacyGain = gift.type === 'bad' ? 2 : (gift.type === 'random' ? 3 : 5);
+  addIntimacy(intimacyGain);
   saveMemory();
 
   // 显示送礼动画
@@ -1778,36 +1845,79 @@ function sendGift(giftId) {
   dom.giftSuccess.classList.add('show');
   setTimeout(() => dom.giftSuccess.classList.remove('show'), 1500);
 
-  // 延迟状态更新 - Bobby 的回应
-  const delay = isNight() ? 30000 : 60000; // 深夜30秒后，白天1分钟后
+  // 神秘包裹：随机效果
+  let effectStatus;
+  let deepReactions;
+
+  if (giftId === 'luckbox') {
+    const luckResult = DATA.luckboxEffects[Math.floor(Math.random() * DATA.luckboxEffects.length)];
+    effectStatus = luckResult.status;
+    deepReactions = [luckResult.msg];
+  } else if (gift.type === 'bad') {
+    effectStatus = DATA.giftEffects[giftId];
+    deepReactions = DATA.badLuckReactions[giftId] || ['......'];
+  } else {
+    effectStatus = DATA.giftEffects[giftId];
+    const goodReactions = {
+      coffee: ['有点清醒了', '嗯...咖啡的味道还在'],
+      medicine: ['好多了', '...不知道该说什么'],
+      taxi: ['到家了', '不用挤地铁真好'],
+      book: ['在看一本新的', '还不错'],
+      blanket: ['暖和了', '好困'],
+      food: ['饱了', '...嗯']
+    };
+    deepReactions = goodReactions[giftId] || ['嗯...'];
+  }
+
+  // 延迟状态更新
+  const delay = isNight() ? 30000 : 60000;
   setTimeout(() => {
-    const effect = DATA.giftEffects[giftId];
-    if (effect) {
-      dom.moodText.textContent = effect;
-      dom.chatStatus.textContent = effect;
-      state.statusText = effect;
+    if (effectStatus) {
+      dom.moodText.textContent = effectStatus;
+      dom.chatStatus.textContent = effectStatus;
+      state.statusText = effectStatus;
     }
   }, delay);
 
-  // 更深层的反应：Bobby 在聊天中会自然提及（40%概率，延迟更久）
-  if (Math.random() < 0.4) {
-    const deepDelay = isNight() ? 120000 : 300000; // 深夜2分钟后，白天5分钟后
+  // 倒霉礼物：Bobby 反应更强烈（70%概率提及），好的礼物40%
+  const reactChance = (gift.type === 'bad' || giftId === 'luckbox') ? 0.7 : 0.4;
+  if (Math.random() < reactChance) {
+    const deepDelay = isNight() ? 120000 : 300000;
     setTimeout(() => {
       if (state.currentPage === 'chatPage') {
-        const reactions = {
-          coffee: ['有点清醒了', '嗯...咖啡的味道还在'],
-          medicine: ['好多了', '...不知道该说什么'],
-          taxi: ['到家了', '不用挤地铁真好'],
-          book: ['在看一本新的', '还不错'],
-          blanket: ['暖和了', '好困'],
-          food: ['饱了', '...嗯']
-        };
-        const pool = reactions[giftId] || ['嗯...'];
-        const msg = pool[Math.floor(Math.random() * pool.length)];
+        const msg = deepReactions[Math.floor(Math.random() * deepReactions.length)];
         addThought('...');
         setTimeout(() => addMessage(msg, false), 2000);
       }
     }, deepDelay);
+  }
+
+  // 倒霉礼物还会在动态里吐槽（50%概率）
+  if (gift.type === 'bad' && Math.random() < 0.5) {
+    const noteDelay = isNight() ? 180000 : 600000;
+    setTimeout(() => {
+      const complaintNotes = {
+        banana: ['出门踩到香蕉皮了。裤子脏了。今天不宜出门。', '鞋底黏黏的...香蕉皮。'],
+        alarm: ['不知道谁放了十个闹钟。全部同时响了。差点聋了。', '闹钟响了十个。心脏受不了。'],
+        homework: ['桌上多了一套卷子。写到一半放弃了。', '谁给我寄的卷子...写不完。'],
+        rain: ['突然下雨了。全身湿透。鞋子里面都是水。', '今天下雨了。没带伞。又。'],
+        rock: ['踢到一块石头。脚趾头疼。新鞋也踢坏了。', '地上不知道哪来的石头。踢到了。']
+      };
+      const pool = complaintNotes[giftId] || ['今天有点倒霉。'];
+      const note = pool[Math.floor(Math.random() * pool.length)];
+      const now = new Date();
+      DATA.notes.unshift({
+        id: Date.now(),
+        text: note,
+        time: '刚刚',
+        timeDetail: now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0'),
+        likes: 0,
+        liked: false,
+        comments: []
+      });
+      if (state.currentPage === 'notesPage') loadNotes();
+      if (state.currentPage === 'profilePage') loadProfileNotes();
+    }, noteDelay);
   }
 }
 

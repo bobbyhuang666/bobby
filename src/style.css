@@ -1102,6 +1102,9 @@ body {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
+  max-height: 50vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .gift-item {
@@ -1135,6 +1138,14 @@ body {
 .gift-price {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.gift-item.gift-bad {
+  border-color: rgba(239,83,80,0.15);
+}
+
+.gift-item.gift-bad .gift-price {
+  color: rgba(239,83,80,0.5);
 }
 
 /* 礼物成功动画 */
