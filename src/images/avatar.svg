@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7C4DFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#E040FB;stop-opacity:1" />
+    </linearGradient>
+
+    <radialGradient id="skinGrad" cx="50%" cy="40%" r="50%">
+      <stop offset="0%" style="stop-color:#FFE4C4;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F5D5B0;stop-opacity:1" />
+    </radialGradient>
+
+    <linearGradient id="hairGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A3728;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3E2C1E;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- 圆形背景 -->
+  <circle cx="100" cy="100" r="98" fill="url(#bgGrad)"/>
+
+  <!-- 人物 -->
+  <g transform="translate(100, 105)">
+    <!-- 身体 -->
+    <path d="M-42,35 C-42,55 -20,60 0,60 C20,60 42,55 42,35 L38,20 C38,15 -38,15 -38,20Z" fill="#764ba2"/>
+
+    <!-- 脖子 -->
+    <rect x="-12" y="8" width="24" height="18" rx="12" fill="url(#skinGrad)"/>
+
+    <!-- 头部 -->
+    <ellipse cx="0" cy="-15" rx="38" ry="42" fill="url(#skinGrad)"/>
+
+    <!-- 头发 -->
+    <path d="M-38,-30 C-38,-55 -15,-65 0,-65 C15,-65 38,-55 38,-30 C35,-35 25,-40 15,-38 C5,-36 -5,-36 -15,-38 C-25,-40 -35,-35 -38,-30Z" fill="url(#hairGrad)"/>
+
+    <!-- 眼睛 -->
+    <ellipse cx="-14" cy="-20" rx="5" ry="6" fill="#2C1810"/>
+    <ellipse cx="14" cy="-20" rx="5" ry="6" fill="#2C1810"/>
+
+    <!-- 高光 -->
+    <ellipse cx="-12" cy="-22" rx="2" ry="2.5" fill="white" opacity="0.9"/>
+    <ellipse cx="16" cy="-22" rx="2" ry="2.5" fill="white" opacity="0.9"/>
+
+    <!-- 嘴巴 -->
+    <path d="M-8,-2 C-3,5 3,5 8,-2" stroke="#E8836B" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+    <!-- 腮红 -->
+    <ellipse cx="-22" cy="-12" rx="8" ry="5" fill="#FFB6C1" opacity="0.35"/>
+    <ellipse cx="22" cy="-12" rx="8" ry="5" fill="#FFB6C1" opacity="0.35"/>
+  </g>
+
+  <!-- 边框 -->
+  <circle cx="100" cy="100" r="98" fill="none" stroke="white" stroke-width="2" opacity="0.3"/>
+</svg>

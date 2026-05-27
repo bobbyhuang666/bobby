@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Bobby - 存在物形式低压AI陪伴</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <!-- 概念说明浮层 -->
+    <div class="concept-overlay" id="conceptOverlay">
+      <div class="concept-card">
+        <h2>Bobby</h2>
+        <p class="concept-subtitle">存在物形式低压AI陪伴的概念验证</p>
+        <p class="concept-desc">
+          Bobby不是聊天机器人，而是一个有自己生活节奏的数字存在。<br>
+          它不围着你转，它和你平行存在。
+        </p>
+        <button class="concept-btn" onclick="closeConcept()">开始体验</button>
+      </div>
+    </div>
+
+    <!-- 聊天页面 -->
+    <div id="chatPage" class="page active">
+      <div class="header">
+        <span class="header-title">Bobby</span>
+        <button class="header-btn" onclick="showConcept()">?</button>
+      </div>
+
+      <div class="chat-area" id="chatArea">
+        <div class="msg-list" id="msgList"></div>
+        <div class="typing" id="typing">
+          <div class="typing-bubble">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="input-bar">
+        <input type="text" class="input-box" id="inputBox" placeholder="输入消息">
+        <button class="send-btn" id="sendBtn" disabled onclick="sendMessage()">↑</button>
+      </div>
+
+      <div class="tab-bar">
+        <button class="tab active" data-page="chatPage">
+          <span class="tab-icon">💬</span>
+          <span class="tab-label">消息</span>
+        </button>
+        <button class="tab" data-page="profilePage">
+          <span class="tab-icon">👤</span>
+          <span class="tab-label">主页</span>
+        </button>
+        <button class="tab" data-page="notesPage">
+          <span class="tab-icon">📝</span>
+          <span class="tab-label">动态</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 主页页面 -->
+    <div id="profilePage" class="page">
+      <div class="header">
+        <button class="header-back" onclick="showPage('chatPage')">←</button>
+        <span class="header-title">主页</span>
+        <div class="header-right"></div>
+      </div>
+
+      <div class="profile-content">
+        <div class="profile-banner">
+          <div class="profile-avatar">
+            <img src="images/avatar.svg" alt="Bobby" />
+          </div>
+        </div>
+
+        <div class="profile-body">
+          <div class="profile-name">Bobby</div>
+          <div class="profile-id">ID: bobby_life</div>
+          <div class="profile-status online">
+            <span class="status-dot"></span>
+            <span id="statusText">还没睡呢</span>
+          </div>
+          <div class="profile-bio">一个安静的存在</div>
+
+          <div class="profile-actions">
+            <button class="action-btn" onclick="showPage('chatPage')">
+              <span class="action-icon">💬</span>
+              <span>发消息</span>
+            </button>
+            <button class="action-btn" onclick="showPage('notesPage')">
+              <span class="action-icon">📝</span>
+              <span>动态</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="profile-section">
+          <div class="section-title">最近的动态</div>
+          <div id="profileNotes"></div>
+        </div>
+      </div>
+
+      <!-- 礼物按钮 -->
+      <button class="gift-btn" onclick="showGiftPanel()">🎁</button>
+
+      <div class="tab-bar">
+        <button class="tab" data-page="chatPage">
+          <span class="tab-icon">💬</span>
+          <span class="tab-label">消息</span>
+        </button>
+        <button class="tab active" data-page="profilePage">
+          <span class="tab-icon">👤</span>
+          <span class="tab-label">主页</span>
+        </button>
+        <button class="tab" data-page="notesPage">
+          <span class="tab-icon">📝</span>
+          <span class="tab-label">动态</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 动态页面 -->
+    <div id="notesPage" class="page">
+      <div class="header">
+        <button class="header-back" onclick="showPage('profilePage')">←</button>
+        <span class="header-title">Bobby 的动态</span>
+        <div class="header-right"></div>
+      </div>
+
+      <div class="notes-list" id="notesList"></div>
+
+      <div class="tab-bar">
+        <button class="tab" data-page="chatPage">
+          <span class="tab-icon">💬</span>
+          <span class="tab-label">消息</span>
+        </button>
+        <button class="tab" data-page="profilePage">
+          <span class="tab-icon">👤</span>
+          <span class="tab-label">主页</span>
+        </button>
+        <button class="tab active" data-page="notesPage">
+          <span class="tab-icon">📝</span>
+          <span class="tab-label">动态</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 礼物面板 -->
+    <div class="gift-panel" id="giftPanel" onclick="hideGiftPanel()">
+      <div class="gift-content" onclick="event.stopPropagation()">
+        <div class="gift-header">
+          <span>送点什么</span>
+          <button class="gift-close" onclick="hideGiftPanel()">✕</button>
+        </div>
+        <div class="gift-grid" id="giftGrid"></div>
+        <div class="gift-hint">礼物会悄悄送达，不会打扰</div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
