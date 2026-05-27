@@ -565,6 +565,31 @@ function showRelationshipUpgrade(level) {
       showToast(`${level.name} · ${level.desc}`);
     }, 1500);
   }, 3000);
+
+  // 特定里程碑的 Bobby 反应
+  const milestoneReactions = {
+    '认识': ['嗯...算认识了吧', '...你叫什么来着', '嗯'],
+    '熟悉': ['嗯，挺久了', '...你还挺常来的', '嗯嗯'],
+    '默契': ['嗯...', '有些话不用说出来', '...你懂的'],
+    '信赖': ['嗯，我在', '...有你在挺好的', '嗯...你还在啊']
+  };
+
+  const reactions = milestoneReactions[level.name];
+  if (reactions && Math.random() < 0.6) {
+    const msg = reactions[Math.floor(Math.random() * reactions.length)];
+    setTimeout(() => addMessage(msg, false), 5000);
+  }
+
+  // 更新主页标语
+  const milestoneTaglines = {
+    '认识': '算是在网上见过',
+    '熟悉': '有一种安静的默契',
+    '默契': '不需要说太多',
+    '信赖': '你是它的深夜知己'
+  };
+  if (milestoneTaglines[level.name]) {
+    DATA.taglines.unshift(milestoneTaglines[level.name]);
+  }
 }
 
 // ===== 低语系统（Bobby 主动消息）=====
@@ -1004,6 +1029,9 @@ function showPage(pageId) {
     updateMomentCard();
   } else if (pageId === 'notesPage') {
     loadNotes();
+    // 更新动态页的状态显示
+    const notesStatus = document.getElementById('notesStatus');
+    if (notesStatus) notesStatus.textContent = state.statusText;
   }
 }
 
@@ -1174,6 +1202,67 @@ function saveMessages() {
 }
 
 // ===== 动态 =====
+// 下拉刷新 - 动态页面
+function setupNotesPullRefresh() {
+  const container = dom.notesList;
+  if (!container) return;
+
+  let startY = 0;
+  let pulling = false;
+
+  container.addEventListener('touchstart', (e) => {
+    if (container.scrollTop <= 0) {
+      startY = e.touches[0].clientY;
+      pulling = true;
+    }
+  });
+
+  container.addEventListener('touchmove', (e) => {
+    if (!pulling) return;
+    const diff = e.touches[0].clientY - startY;
+    if (diff > 80) {
+      pulling = false;
+      // 生成一条新碎片
+      generateNewNote();
+      showToast('有新的碎片...');
+    }
+  });
+
+  container.addEventListener('touchend', () => { pulling = false; });
+}
+
+function generateNewNote() {
+  const freshNotes = [
+    '刚刚听到楼上传来一阵钢琴声。弹得不太好，但有种认真的感觉。',
+    '泡了一杯茶，太烫了。放在窗台上晾着。',
+    '看到一只鸟停在电线上，好久没动。',
+    '手机震了一下，是天气预报。明天有雨。',
+    '发现书桌上有一道光，是从百叶窗的缝隙里漏进来的。',
+    '隔壁在做饭，闻到了番茄炒蛋的味道。',
+    '楼下有人在遛狗，狗跑得很快。',
+    '翻开了一本很久没看的书，书签还夹在上次停下的地方。',
+    '把耳机摘下来，发现外面比想象中安静。',
+    '窗帘被风吹起来了一点。'
+  ];
+
+  const note = freshNotes[Math.floor(Math.random() * freshNotes.length)];
+  const now = new Date();
+  const h = now.getHours().toString().padStart(2, '0');
+  const m = now.getMinutes().toString().padStart(2, '0');
+
+  DATA.notes.unshift({
+    id: Date.now(),
+    text: note,
+    time: '刚刚',
+    timeDetail: `${h}:${m}`,
+    likes: 0,
+    liked: false,
+    comments: []
+  });
+
+  loadNotes();
+}
+
 function loadNotes() {
   const container = dom.notesList;
   let html = '';
@@ -1736,7 +1825,17 @@ function checkDailyNote() {
     '便利店阿姨问我怎么天天来。',
     '公交车上遇到一只很乖的狗。',
     '今天的晚霞很好看。拍了一张。',
-    '睡不着，数了一下天花板上的裂纹。'
+    '睡不着，数了一下天花板上的裂纹。',
+    '楼下的路灯换了一个新的，比以前亮了好多。有点不习惯。',
+    '发现枕头下面压着一张很久以前的电影票。已经看不清字了。',
+    '窗外有一只鸟一直在叫，叫了很久。',
+    '泡了一杯茶，忘了喝，凉了。',
+    '路过公园，有人在吹萨克斯。走调了，但有种认真的感觉。',
+    '手机电量到1%的时候充上了。松了口气。',
+    '半夜听到救护车的声音。希望没事。',
+    '发现袜子破了一个洞。但只破了一只。',
+    '楼下的煎饼摊今天没出。有点失望。',
+    '风把门吹关了，吓了一跳。'
   ];
 
   // 生成新碎片（最多3条，防止刷屏）
@@ -1782,6 +1881,7 @@ function init() {
   loadComments();  // 先加载评论数据
   loadNotes();
   loadProfileNotes();
+  setupNotesPullRefresh();
 
   const visited = localStorage.getItem('bobby_visited');
   if (visited) {
