@@ -398,7 +398,8 @@ const state = {
   whisperCount: 0,  // 今天主动消息次数
   unreadMsgIds: [], // 所有未读用户消息 ID
   isProcessing: false, // Bobby 正在处理消息
-  batchTimer: null    // 消息批量计时器
+  batchTimer: null,   // 消息批量计时器
+  unreadBobbyReplies: 0 // 未读 Bobby 评论回复数
 };
 
 // ===== DOM =====
@@ -1070,6 +1071,37 @@ function setupEvents() {
   });
 }
 
+// ===== 未读 Bobby 回复提醒 =====
+function addUnreadBobbyReply() {
+  state.unreadBobbyReplies = (state.unreadBobbyReplies || 0) + 1;
+  localStorage.setItem('bobby_unread_replies', state.unreadBobbyReplies);
+  updateNotesBadge();
+}
+
+function clearUnreadBobbyReplies() {
+  state.unreadBobbyReplies = 0;
+  localStorage.removeItem('bobby_unread_replies');
+  updateNotesBadge();
+}
+
+function updateNotesBadge() {
+  const count = state.unreadBobbyReplies || 0;
+  // 所有页面的动态 tab 都更新
+  document.querySelectorAll('.tab[data-page="notesPage"] .tab-icon').forEach(icon => {
+    let badge = icon.querySelector('.tab-badge');
+    if (count > 0) {
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'tab-badge';
+        icon.appendChild(badge);
+      }
+      badge.textContent = count > 99 ? '99+' : count;
+    } else {
+      if (badge) badge.remove();
+    }
+  });
+}
+
 // ===== 页面切换 =====
 function showPage(pageId) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -1091,6 +1123,8 @@ function showPage(pageId) {
     // 更新动态页的状态显示
     const notesStatus = document.getElementById('notesStatus');
     if (notesStatus) notesStatus.textContent = state.statusText;
+    // 清除未读 Bobby 回复提醒
+    clearUnreadBobbyReplies();
   }
 }
 
@@ -1553,22 +1587,7 @@ async function submitComment(noteId) {
   const willReply = Math.random() < replyChance;
 
   if (willReply) {
-    // 显示"正在输入"状态
-    const replyIndicator = document.createElement('div');
-    replyIndicator.className = 'comment-item';
-    replyIndicator.id = `commentTyping-${noteId}`;
-    replyIndicator.innerHTML = `
-      <div class="comment-avatar bobby">B</div>
-      <div class="comment-body">
-        <div class="comment-author bobby">Bobby</div>
-        <div class="comment-text" style="color: var(--text-muted)">...</div>
-      </div>
-    `;
-    if (commentList) {
-      commentList.appendChild(replyIndicator);
-    }
-
-    // 延迟 2-6 秒后回复
+    // 延迟 2-6 秒后回复（不显示输入动画）
     const delay = 2000 + Math.random() * 4000;
     await new Promise(r => setTimeout(r, delay));
 
@@ -1577,14 +1596,9 @@ async function submitComment(noteId) {
     try {
       reply = await getBobbyNoteReply(note.text, text);
     } catch (e) {
-      // 回退到预设回复
       const fallbacks = ['嗯', '...', '看到了', '嗯嗯'];
       reply = fallbacks[Math.floor(Math.random() * fallbacks.length)];
     }
-
-    // 移除输入指示
-    const typing = document.getElementById(`commentTyping-${noteId}`);
-    if (typing) typing.remove();
 
     // 添加Bobby回复
     note.comments.push({ text: reply, isBobby: true, time: new Date().toISOString() });
@@ -1596,6 +1610,9 @@ async function submitComment(noteId) {
     if (btn) {
       btn.innerHTML = `💬 ${note.comments.length}`;
     }
+
+    // 增加未读 Bobby 回复计数，显示红点提醒
+    addUnreadBobbyReply();
 
     saveComments();
   }
@@ -2105,6 +2122,12 @@ function init() {
   setupEvents();
   loadGifts();
   loadComments();  // 先加载评论数据
+  // 恢复未读 Bobby 回复计数
+  const savedReplies = localStorage.getItem('bobby_unread_replies');
+  if (savedReplies) {
+    state.unreadBobbyReplies = parseInt(savedReplies) || 0;
+    updateNotesBadge();
+  }
   loadNotes();
   loadProfileNotes();
   setupNotesPullRefresh();
