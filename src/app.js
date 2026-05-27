@@ -624,11 +624,24 @@ function loadNotes() {
       html += `<div class="timeline-date">${note.time}</div>`;
       lastTime = note.time;
     }
+    // 根据时间添加氛围图标
+    const hour = parseInt(note.timeDetail.split(':')[0]);
+    let timeIcon = '🌙';
+    if (hour >= 5 && hour < 8) timeIcon = '🌅';
+    else if (hour >= 8 && hour < 12) timeIcon = '☀️';
+    else if (hour >= 12 && hour < 17) timeIcon = '🌤';
+    else if (hour >= 17 && hour < 20) timeIcon = '🌇';
+    else if (hour >= 20 && hour < 23) timeIcon = '🌆';
+
     html += `
       <div class="timeline-card">
+        <div class="note-time-badge">
+          <span class="note-time-icon">${timeIcon}</span>
+          <span class="note-time-text">${note.timeDetail}</span>
+        </div>
         <div class="note-text">${note.text}</div>
         <div class="note-meta">
-          <span class="note-time">${note.timeDetail}</span>
+          <span class="note-time">${note.time}</span>
           <button class="note-like ${note.liked ? 'liked' : ''}" onclick="toggleLike(${note.id})">
             ${note.liked ? '❤️' : '♡'} ${note.likes || ''}
           </button>
@@ -652,14 +665,23 @@ function toggleLike(id) {
 // ===== 主页 =====
 function loadProfileNotes() {
   const container = dom.profileNotes;
-  container.innerHTML = DATA.notes.slice(0, 3).map(note => `
-    <div class="note-card">
-      <div class="note-text">${note.text}</div>
-      <div class="note-meta">
-        <span class="note-time">${note.time} ${note.timeDetail}</span>
+  container.innerHTML = DATA.notes.slice(0, 3).map(note => {
+    const hour = parseInt(note.timeDetail.split(':')[0]);
+    let timeIcon = '🌙';
+    if (hour >= 5 && hour < 8) timeIcon = '🌅';
+    else if (hour >= 8 && hour < 12) timeIcon = '☀️';
+    else if (hour >= 12 && hour < 17) timeIcon = '🌤';
+    else if (hour >= 17 && hour < 20) timeIcon = '🌇';
+    else if (hour >= 20 && hour < 23) timeIcon = '🌆';
+    return `
+      <div class="note-card">
+        <div class="note-text">${note.text}</div>
+        <div class="note-meta">
+          <span class="note-time">${timeIcon} ${note.time} ${note.timeDetail}</span>
+        </div>
       </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   // 标语
   dom.profileTagline.textContent = DATA.taglines[Math.floor(Math.random() * DATA.taglines.length)];
