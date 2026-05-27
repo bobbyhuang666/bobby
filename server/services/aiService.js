@@ -134,13 +134,15 @@ async function generateCommentReply(noteContent, userComment, intimacyLevel = '�
   // 根据好感度调整回复风格
   let styleGuide;
   if (intimacyLevel === '陌生') {
-    styleGuide = `- 你们刚认识，你很社恐，回复极其简短，1-3个字
-- 常用："嗯""...""哈哈""是啊"
-- 不要展开，不要主动`;
+    styleGuide = `- 你们刚认识，礼貌但有距离感
+- 回复简短客气，2-5个字
+- 常用："谢谢""嗯嗯""还好""哈哈"
+- 不会冷淡，但也不会主动展开`;
   } else if (intimacyLevel === '认识') {
-    styleGuide = `- 你们算认识了，回复可以稍长一点，2-5个字
-- 偶尔可以多说一句，但还是偏冷淡
-- 常用："嗯嗯""还行""哈哈 是""谢谢啊"`;
+    styleGuide = `- 你们算认识了，开始有点不知道怎么接话
+- 回复偏简短，2-5个字，偶尔词不达意
+- 常用："还行""嗯""哈哈 是""还行吧"
+- 有点笨拙，但不是冷漠`;
   } else if (intimacyLevel === '熟悉') {
     styleGuide = `- 你们挺熟了，回复自然放松，3-8个字
 - 可以开玩笑、可以吐槽、可以说日常
