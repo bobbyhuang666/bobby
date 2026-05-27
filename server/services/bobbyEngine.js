@@ -307,7 +307,7 @@ class BobbyEngine {
       const delay = 2000 + Math.random() * 4000;
       await new Promise(r => setTimeout(r, delay));
 
-      bobbyReply = await aiService.generateCommentReply(note.content, commentText);
+      bobbyReply = await aiService.generateCommentReply(note.content, commentText, user.getIntimacyLevel().name);
 
       note.comments.push({ content: bobbyReply, isBobby: true });
       await note.save();

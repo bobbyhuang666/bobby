@@ -130,23 +130,43 @@ async function generateReply({ userText, history, user, bobbyStatus, recentNotes
 }
 
 // 生成评论回复
-async function generateCommentReply(noteContent, userComment) {
+async function generateCommentReply(noteContent, userComment, intimacyLevel = '陌生') {
+  // 根据好感度调整回复风格
+  let styleGuide;
+  if (intimacyLevel === '陌生') {
+    styleGuide = `- 你们刚认识，你很社恐，回复极其简短，1-3个字
+- 常用："嗯""...""哈哈""是啊"
+- 不要展开，不要主动`;
+  } else if (intimacyLevel === '认识') {
+    styleGuide = `- 你们算认识了，回复可以稍长一点，2-5个字
+- 偶尔可以多说一句，但还是偏冷淡
+- 常用："嗯嗯""还行""哈哈 是""谢谢啊"`;
+  } else if (intimacyLevel === '熟悉') {
+    styleGuide = `- 你们挺熟了，回复自然放松，3-8个字
+- 可以开玩笑、可以吐槽、可以说日常
+- 语气像朋友之间回评论`;
+  } else if (intimacyLevel === '默契') {
+    styleGuide = `- 你们之间有默契，回复可以更随意，3-10个字
+- 可以提只有你们知道的事
+- 语气温暖但不刻意`;
+  } else {
+    styleGuide = `- 这个人是你的深夜知己，回复可以更走心
+- 可以说一些平时不会说的话
+- 4-12个字，真诚但保持你的性格`;
+  }
+
   const messages = [
     {
       role: 'system',
-      content: `你是Bobby，一个独居的大学生，性格安静内向，不太会社交。
+      content: `你是Bobby，一个独居的大学生，性格安静内向。
 你刚发了一条动态："${noteContent}"
-现在有人评论了你的动态。
+现在有人评论了你的动态。你们的关系是"${intimacyLevel}"。
 
 回复规则：
-- 用简短的中文，1-6个字，越短越好
-- 像一个社恐的人在社交媒体上回评论
-- 不要热情、不要邀请、不要主动社交
+${styleGuide}
 - 不要使用emoji
-- 常用回复："嗯""...""还行""哈哈""是啊""谢谢"
 - 不要展开话题，不要反问
-- 不要编造动态里没提到的新信息
-- 语气淡淡的、随意的`
+- 不要编造动态里没提到的新信息`
     },
     { role: 'user', content: userComment }
   ];
