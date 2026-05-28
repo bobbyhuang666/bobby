@@ -4,7 +4,10 @@
 
 ### 存在物形式低压AI陪伴的概念验证
 
-> **License: CC BY-NC-SA 4.0** — 禁止商用，转载请注明出处
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)]()
+[![MongoDB](https://img.shields.io/badge/MongoDB-7+-47A248?logo=mongodb&logoColor=white)]()
+[![DeepSeek](https://img.shields.io/badge/AI-DeepSeek-536DFE)]()
 
 </div>
 
@@ -32,6 +35,8 @@
 
 **Bobby 就是这个想法的原型。**
 
+大多数AI伴侣在追求"让用户聊得更多"。Bobby 想试试"让用户想得更多"。
+
 ---
 
 ## Bobby 是什么
@@ -46,6 +51,25 @@ Bobby 是一个**有自己生活节奏的数字存在**。
 - 你送它一杯咖啡，它不会说谢谢——但它的状态栏会悄悄变化
 
 **它不围着你转。它和你平行存在。**
+
+---
+
+## 预览
+
+<div align="center">
+<table>
+<tr>
+<td align="center"><img src="screenshots/01-onboarding.png" width="200"><br><sub>引导页 — "白天，它有自己的生活"</sub></td>
+<td align="center"><img src="screenshots/04-chat-reply.png" width="200"><br><sub>聊天 — "哦，你来了"</sub></td>
+<td align="center"><img src="screenshots/06-profile.png" width="200"><br><sub>主页 — "你们还不太熟"</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="screenshots/08-notes.png" width="200"><br><sub>碎片 — Bobby 不会回你，但偶尔会</sub></td>
+<td align="center"><img src="screenshots/09-gift-panel.png" width="200"><br><sub>送点什么 — 它不会说谢谢</sub></td>
+<td align="center"><img src="screenshots/11-relationship-card.png" width="200"><br><sub>关系 — 从陌生到信赖</sub></td>
+</tr>
+</table>
+</div>
 
 ---
 
@@ -144,36 +168,48 @@ Bobby 偶尔会发来一条消息：
 
 > **如果AI不再是一个随叫随到的工具，而是一个和你平行存在的生命体，会发生什么？**
 
-目前它已经具备：
-- DeepSeek API 驱动的真实对话（流式输出）
-- 确定性状态机（逻辑化的状态转换）
-- 好感度系统（关系从陌生到信赖的渐进）
-- 碎碎念/低语系统（低频主动互动）
-- 多模态消息（文字/照片/语音）
-- 动态评论（Bobby 偶尔回复）
-- 已读/未读状态
-- 礼物系统（匿名关心）
-- 每日碎片生成
-- VIP 订阅框架
+目前已具备：
+
+- 🌙 **状态机** — 40+ 状态，覆盖从"还没睡呢"到"在上课"的完整日常
+- 🌊 **情绪系统** — 30维情绪引擎，随昼夜节律自主演化
+- 📝 **碎片动态** — Bobby 记录生活，你只是旁观者
+- 💬 **AI 对话** — DeepSeek 驱动，流式输出，非均匀打字节奏
+- 🎁 **礼物系统** — 12种礼物，匿名关心，它不会说谢谢
+- 💗 **关系进化** — 从"陌生"到"信赖"，好感度随互动缓慢生长
+- 🔒 **安全过滤** — 三层防护，防止 prompt injection 和角色逃逸
+- 🌧️ **天气感知** — 接入 Open-Meteo，下雨天 Bobby 会说"好潮"
 
 我不确定答案。但我觉得这个问题值得被认真对待。
 
 ---
 
-## 核心模块说明
+## 技术架构
 
-本仓库开源了前端界面和基础后端框架，**以下核心模块未包含在公开仓库中**：
+```
+bobby/
+├── src/                          # 前端（纯原生 HTML/CSS/JS，无框架依赖）
+│   ├── index.html                # 入口页 + 5步引导
+│   ├── style.css                 # 2200+ 行，时间感知背景色
+│   └── app.js                    # 2600+ 行，Canvas 粒子 + Web Audio 音效
+│
+└── server/                       # 后端
+    ├── app.js                    # Express + Socket.io
+    ├── services/
+    │   └── bobbyEngine.js        # 核心引擎（40+ 状态的状态机）
+    ├── jobs/                     # 8 个定时任务（状态推进、碎片生成、情绪演化...）
+    ├── models/                   # BobbyState / Message / Note / User
+    └── routes/                   # 认证 / 聊天 / 动态 / 礼物 / 用户
+```
 
-- `emotionEngine.js` — 30维情绪系统（昼夜节律、粉红噪声、共激活扩散）
-- `cognitiveLoop.js` — 认知循环（沉思、整合、记忆衰减）
-- `memoryService.js` — 记忆系统（向量检索、用户画像）
-- `aiService.js` — AI提示词（Bobby人设、对话风格）
+**技术栈：** Node.js · Express · MongoDB · Socket.io · DeepSeek API · Web Audio API
 
-如需合作或商业授权，请联系：bobbyhuang666
+**核心模块（未开源）：** emotionEngine · cognitiveLoop · memoryService · aiService
 
 ---
 
 ## 快速体验
+
+### 纯前端（仅浏览界面）
 
 ```bash
 git clone https://github.com/bobbyhuang666/bobby.git
@@ -181,28 +217,51 @@ cd bobby/src
 open index.html
 ```
 
-或者用本地服务器：
+这只能看到静态界面，无法体验对话和状态机。
+
+### 完整体验（含后端 + AI 对话）
 
 ```bash
-cd bobby/src
-python3 -m http.server 8080
-# 访问 http://localhost:8080
+# 前置依赖
+# 1. MongoDB（本地或云）
+# 2. DeepSeek API Key
+
+git clone https://github.com/bobbyhuang666/bobby.git
+cd bobby/server
+cp .env.example .env
+# 编辑 .env，填入 MONGODB_URI 和 DEEPSEEK_API_KEY
+npm install
+node app.js
+# 访问 http://localhost:3000
 ```
+
+---
+
+## 核心模块说明
+
+本仓库开源了前端界面和基础后端框架，**以下 4 个核心模块未包含在仓库中**：
+
+| 模块 | 说明 |
+|------|------|
+| `emotionEngine.js` | 30维情绪系统 — 昼夜节律、粉红噪声、共激活扩散 |
+| `cognitiveLoop.js` | 认知循环 — 沉思、整合、记忆衰减 |
+| `memoryService.js` | 记忆系统 — 向量检索、用户画像、Dream-time 衰减 |
+| `aiService.js` | AI 提示词 — Bobby 人设、对话风格、碎碎念生成 |
+
+这些模块是 Bobby 的"灵魂"。保留它们是因为我不确定这个方向最终会走向哪里。
+
+如果你对这个项目感兴趣，或者想一起探索"低压AI陪伴"的可能性，欢迎联系我：**bobbyhuang666**
 
 ---
 
 ## 最后
 
-> **人际关系的深浅，不取决于说了多少话，**
-> **而取决于对方在你脑海中占据了多少认知带宽。**
-
-大多数AI伴侣在追求"让用户聊得更多"。
-
-Bobby 想试试"让用户想得更多"。
-
 **缺席创造挂念。**
 
 **留白产生羁绊。**
+
+> *人际关系的深浅，不取决于说了多少话，*
+> *而取决于对方在你脑海中占据了多少认知带宽。*
 
 这不是唯一正确的方向，但这是一个值得被探索的方向。
 
