@@ -64,7 +64,7 @@ Bobby 是一个**有自己生活节奏的数字存在**。
 <td align="center"><img src="screenshots/06-profile.png" width="200"><br><sub>主页 — "你们还不太熟"</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="screenshots/08-notes.png" width="200"><br><sub>碎片 — Bobby 不会回你，但偶尔会</sub></td>
+<td align="center"><img src="screenshots/08-notes.png" width="200"><br><sub>碎片 — Bobby 不会一直回你，但偶尔会</sub></td>
 <td align="center"><img src="screenshots/09-gift-panel.png" width="200"><br><sub>送点什么 — 它不会说谢谢</sub></td>
 <td align="center"><img src="screenshots/11-relationship-card.png" width="200"><br><sub>关系 — 从陌生到信赖</sub></td>
 </tr>
