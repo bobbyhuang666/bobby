@@ -37,3 +37,9 @@ yarn-error.log*
 # Screenshots & test artifacts
 screenshots/
 test-output/
+
+# Core IP (not open source)
+server/services/emotionEngine.js
+server/services/cognitiveLoop.js
+server/services/memoryService.js
+server/services/aiService.js
