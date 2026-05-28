@@ -2,164 +2,162 @@
 // Bobby - 存在物形式低压AI陪伴
 // ============================================
 
-// ===== DeepSeek API =====
-const API_KEY = 'sk-6de99a9a222d437ca5b0f31af273660a';
-const API_URL = 'https://api.deepseek.com/v1/chat/completions';
+// ===== 后端 API 配置（所有 AI 调用走后端代理）=====
+const API_BASE = window.location.origin + '/api';
 
-// 对话历史（保留最近20条）
-let chatHistory = [];
-
-function buildSystemPrompt() {
-  const hour = new Date().getHours();
-  const isNightNow = hour >= 23 || hour < 3;
-  const period = getTimeLabel();
-
-  // 引入当前状态
-  const currentStatus = state.statusText || '在发呆';
-
-  // 引入最近的动态（前3条）
-  const recentNotes = DATA.notes.slice(0, 3).map(n => n.text).join('；');
-
-  let prompt = `你是Bobby。你是一个住在城市里的年轻人，独居，平时上课、打工。
-现在是${period}，${hour}点。你当前的状态是：${currentStatus}。
-
-你最近发了这些动态：${recentNotes}
-
-你正在和一个人聊天。你们不是很熟，但彼此有一种安静的默契。
-
-说话规则：
-- 用简短的中文，像发微信一样，不要用书面语
-- 绝大多数回复控制在2-10个字，偶尔可以长一点
-- 不要解释、不要说教、不要反问太多
-- 可以用"嗯""...""啊""哦"这种语气词
-- 不要使用emoji
-- 不要主动展开话题，回答完就好
-- 不要说自己是AI、是语言模型、是程序
-- 如果对方问你是谁，就说"我就是我啊"或"Bobby"
-- 如果对方问很私人的问题，可以含糊带过
-- 偶尔可以发呆式回复，比如"嗯""在""..."
-- 偶尔可以自然地提到你正在做的事或最近的日常，但不要刻意
-- 如果你之前发过相关的动态，可以自然地关联，就像在回忆一样`;
-
-  if (isNightNow) {
-    prompt += `\n\n现在是深夜，你有点困了但还不想睡。回复可以更简短、更慵懒。`;
-  } else {
-    prompt += `\n\n现在是白天，你在忙别的事，回复应该更简短，有时候像在敷衍。`;
-  }
-
-  // 如果用户有情绪状态
-  if (state.userMood === 'tired') {
-    prompt += `\n对方看起来很累，适当关心但不要太刻意。`;
-  } else if (state.userMood === 'sad') {
-    prompt += `\n对方心情不好，安静地陪着就好，不用说太多安慰的话。`;
-  } else if (state.userMood === 'happy') {
-    prompt += `\n对方心情不错，你也可以放松一点。`;
-  } else if (state.userMood === 'insomnia') {
-    prompt += `\n对方又失眠了，你懂这种感觉。不用说什么安慰的话，在就好。`;
-  }
-
-  // 关系深度暗示
-  const intimacyLevel = getIntimacyLevel();
-  if (intimacyLevel.name === '陌生') {
-    prompt += `\n你们刚认识，说话要有距离感。`;
-  } else if (intimacyLevel.name === '认识') {
-    prompt += `\n你们算认识了，偶尔可以放松一点。`;
-  } else if (intimacyLevel.name === '熟悉') {
-    prompt += `\n你们挺熟的了，可以自然地聊日常。`;
-  } else if (intimacyLevel.name === '默契') {
-    prompt += `\n你们之间有一种不需要说破的默契。可以偶尔说一些只有你们懂的话。`;
-  } else if (intimacyLevel.name === '信赖') {
-    prompt += `\n这个人是你的深夜知己。你可以偶尔敞开心扉，但保持你的性格。`;
-  }
-
-  // 礼物记忆
-  if (state.giftReceived.length > 0) {
-    const recentGift = state.giftReceived[state.giftReceived.length - 1];
-    const giftInfo = DATA.gifts.find(g => g.id === recentGift);
-    const giftName = giftInfo ? giftInfo.name : '东西';
-
-    if (giftInfo && giftInfo.type === 'bad') {
-      prompt += `\n最近好像有人给你送了${giftName}。你不知道是谁。有点莫名其妙，但又觉得好笑。`;
-    } else {
-      prompt += `\n最近好像有人给你送了${giftName}。你不知道是谁，但心里有点暖。`;
-    }
-  }
-
-  return prompt;
+// HTML 转义，防止 XSS 注入
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 
-async function callDeepSeek(userText) {
-  chatHistory.push({ role: 'user', content: userText });
+// ===== 后端 API 工具函数 =====
 
-  // 只保留最近20条
-  if (chatHistory.length > 20) {
-    chatHistory = chatHistory.slice(-20);
+// 带认证的 API 请求（自动重试一次 401）
+async function apiFetch(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  if (state.authToken) {
+    headers['Authorization'] = `Bearer ${state.authToken}`;
   }
-
-  const messages = [
-    { role: 'system', content: buildSystemPrompt() },
-    ...chatHistory
-  ];
-
-  try {
-    const response = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: messages,
-        max_tokens: 100,
-        temperature: 0.85,
-        stream: true
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status}`);
+  let res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  if (res.status === 401) {
+    // Token 过期，重新游客登录后重试一次
+    await guestLogin();
+    headers['Authorization'] = `Bearer ${state.authToken}`;
+    res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+    if (res.status === 401) {
+      throw new Error('认证失败，请刷新页面');
     }
+  }
+  return res;
+}
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let fullReply = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split('\n');
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6).trim();
-        if (data === '[DONE]') continue;
-
-        try {
-          const json = JSON.parse(data);
-          const delta = json.choices?.[0]?.delta?.content;
-          if (delta) {
-            fullReply += delta;
-            // 流式更新气泡
-            updateStreamingBubble(fullReply);
-          }
-        } catch (e) {
-          // 跳过解析错误的行
-        }
+// 游客自动登录
+async function guestLogin() {
+  try {
+    const res = await fetch(`${API_BASE}/auth/guest`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+    const data = await res.json();
+    if (data.token) {
+      state.authToken = data.token;
+      localStorage.setItem('bobby_token', data.token);
+      if (data.user) {
+        state.intimacy = data.user.intimacy || 0;
       }
     }
+  } catch (e) {
+    console.error('游客登录失败:', e);
+  }
+}
 
-    chatHistory.push({ role: 'assistant', content: fullReply });
-    return fullReply.trim() || '嗯';
+// 初始化认证（恢复 token 或自动登录）
+async function initAuth() {
+  const saved = localStorage.getItem('bobby_token');
+  if (saved) {
+    state.authToken = saved;
+    // 验证 token 是否有效
+    try {
+      const res = await fetch(`${API_BASE}/user/profile`, {
+        headers: { 'Authorization': `Bearer ${saved}` }
+      });
+      if (!res.ok) throw new Error('token invalid');
+      const data = await res.json();
+      if (data.user) {
+        state.intimacy = data.user.intimacy || state.intimacy;
+      }
+    } catch (e) {
+      // Token 无效，重新登录
+      await guestLogin();
+    }
+  } else {
+    await guestLogin();
+  }
+}
 
+// 通过后端发送聊天消息（所有 AI 逻辑走后端）
+async function callBobbyBackend(userText) {
+  try {
+    const res = await apiFetch('/chat/send', {
+      method: 'POST',
+      body: JSON.stringify({ text: userText })
+    });
+
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
+
+    const data = await res.json();
+
+    // 同步后端返回的好感度
+    if (data.intimacyLevel && data.intimacyLevel.value !== undefined) {
+      state.intimacy = Math.max(state.intimacy, data.intimacyLevel.value);
+    }
+
+    const fullReply = data.reply?.content || '嗯';
+
+    // 非均匀逐字输出 — 模拟真实打字节奏
+    let displayed = '';
+    for (let i = 0; i < fullReply.length; i++) {
+      displayed += fullReply[i];
+      updateStreamingBubble(displayed);
+
+      const ch = fullReply[i];
+      const prev = i > 0 ? fullReply[i - 1] : '';
+      let delay;
+
+      // 句首：像在思考，慢
+      if (i === 0 || prev === '\n') {
+        delay = 200 + Math.random() * 300;
+      }
+      // 标点符号前：犹豫感
+      else if ('。，！？、；'.includes(ch)) {
+        delay = 150 + Math.random() * 200;
+      }
+      // 省略号：长停顿，像在组织语言
+      else if (ch === '…' || ch === '.') {
+        delay = 250 + Math.random() * 300;
+      }
+      // 换行：段落间停顿
+      else if (ch === '\n') {
+        delay = 300 + Math.random() * 200;
+      }
+      // 标点后面：短暂停顿
+      else if ('。！？…'.includes(prev)) {
+        delay = 120 + Math.random() * 150;
+      }
+      // 普通文字：快速流畅输出
+      else {
+        delay = 25 + Math.random() * 35;
+      }
+
+      await new Promise(r => setTimeout(r, delay));
+    }
+
+    return fullReply;
   } catch (error) {
-    console.error('DeepSeek API error:', error);
-    // API 失败时回退到预设回复
-    const fallback = ['嗯', '...', '在', '嗯嗯'];
+    console.error('后端 API error:', error);
+    const isNightTime = isNight();
+    const fallback = isNightTime
+      ? ['嗯', '...', '在', '嗯嗯', '困了', '外面好安静', '风好大', '在发呆', '还没睡', '月亮挺亮的']
+      : ['嗯', '在忙', '刚看到', '好', '嗯嗯', '刚下课', '在吃饭', '等下说'];
     return fallback[Math.floor(Math.random() * fallback.length)];
   }
+}
+
+
+// ===== 智能滚动：用户在底部时才自动滚，往上翻时不打扰 =====
+let chatScrollLocked = true; // 是否锁定在底部（初始锁定）
+
+function initChatScrollWatcher() {
+  if (!dom.chatArea) return;
+  dom.chatArea.addEventListener('scroll', () => {
+    const { scrollTop, scrollHeight, clientHeight } = dom.chatArea;
+    // 距底部 80px 以内视为"在底部"
+    chatScrollLocked = (scrollHeight - scrollTop - clientHeight) < 80;
+  });
+}
+
+function autoScrollChat() {
+  if (!chatScrollLocked) return; // 用户在看旧消息，不打扰
+  dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
 }
 
 // 流式输出的气泡元素
@@ -178,7 +176,7 @@ function createStreamingBubble() {
     </div>
   `;
   dom.msgList.appendChild(el);
-  dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
+  autoScrollChat();
   streamingEl = el;
   return el;
 }
@@ -188,7 +186,7 @@ function updateStreamingBubble(text) {
   const textEl = streamingEl.querySelector('.streaming-text');
   if (textEl) {
     textEl.textContent = text;
-    dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
+    autoScrollChat();
   }
 }
 
@@ -196,10 +194,10 @@ function finalizeStreamingBubble(text) {
   if (!streamingEl) return;
   const bubble = streamingEl.querySelector('.bubble');
   if (bubble) {
-    bubble.innerHTML = text;
+    bubble.innerHTML = escapeHtml(text);
   }
   setTimeout(() => streamingEl.classList.remove('new-msg'), 2000);
-  state.messages.push({ id: streamingEl.id, text, isUser: false });
+  state.messages.push({ id: streamingEl.id, text, isUser: false, time: formatTimeFriendly(new Date()) });
   saveMessages();
   streamingEl = null;
 }
@@ -227,25 +225,8 @@ const DATA = {
     '嗯嗯', '好晚才看到'
   ],
 
-  // 动态 - 碎片化、有画面感、像一个真实的人在记录生活
-  notes: [
-    { id: 1, text: '下雨了，窗户上全是水痕。盯着看了一会儿。', time: '今天', timeDetail: '01:23', likes: 2, liked: false, comments: [] },
-    { id: 2, text: '楼下便利店的关东煮，萝卜最好吃。阿姨多给了一块。', time: '今天', timeDetail: '00:15', likes: 1, liked: false, comments: [] },
-    { id: 3, text: '学不进去。盯着天花板发了半小时呆。天花板上有个小裂缝，上次还没注意到。', time: '昨天', timeDetail: '02:10', likes: 3, liked: false, comments: [] },
-    { id: 4, text: '加班到现在。地铁上只有我和一个睡着的人。', time: '昨天', timeDetail: '23:30', likes: 0, liked: false, comments: [] },
-    { id: 5, text: '突然想吃草莓。看了一下价格，算了。', time: '前天', timeDetail: '18:05', likes: 4, liked: false, comments: [] },
-    { id: 6, text: '猫又来窗台了。这次带了一只小的。', time: '前天', timeDetail: '22:15', likes: 5, liked: false, comments: [] },
-    { id: 7, text: '耳机里在放一首很久没听的歌。突然想起一些事。', time: '3天前', timeDetail: '01:30', likes: 2, liked: false, comments: [] },
-    { id: 8, text: '路灯下面有只蛾子一直在转圈。看了好久。', time: '3天前', timeDetail: '23:55', likes: 3, liked: false, comments: [] },
-    { id: 9, text: '洗完澡出来，头发还没干，风一吹好冷。', time: '4天前', timeDetail: '00:40', likes: 1, liked: false, comments: [] },
-    { id: 10, text: '路过一家店，门口的风铃响了。好听。', time: '4天前', timeDetail: '19:20', likes: 4, liked: false, comments: [] },
-    { id: 11, text: '手机快没电了，充电线又找不到了。', time: '5天前', timeDetail: '02:55', likes: 2, liked: false, comments: [] },
-    { id: 12, text: '外面有人在吵架。听不清在说什么。', time: '5天前', timeDetail: '23:10', likes: 0, liked: false, comments: [] },
-    { id: 13, text: '云走得很快。月亮一会儿有一会儿没有。', time: '6天前', timeDetail: '01:05', likes: 6, liked: false, comments: [] },
-    { id: 14, text: '买了一杯热可可，太甜了。但暖手。', time: '6天前', timeDetail: '20:30', likes: 3, liked: false, comments: [] },
-    { id: 15, text: '发现阳台上不知道什么时候长了一棵小草。', time: '一周前', timeDetail: '15:45', likes: 7, liked: false, comments: [] },
-    { id: 16, text: '室友今天很安静。不知道怎么了。', time: '一周前', timeDetail: '23:00', likes: 2, liked: false, comments: [] }
-  ],
+  // 动态 - 初始为空，启动时从后端加载
+  notes: [],
 
   // 礼物 - 好的和倒霉的混在一起
   gifts: [
@@ -326,8 +307,12 @@ const DATA = {
     '在看窗外':    { next: ['在发呆', '还没睡呢', '在听歌'], hours: [23,0,1,2] },
     '困了但睡不着': { next: ['在发呆', '快睡了', '在听歌'], hours: [0,1,2] },
     '快睡了':      { next: ['困了但睡不着', '睡了'], hours: [1,2,3] },
+    '睡了':        { next: ['还没睡呢'], hours: [3,4,5] },
 
     // 白天 (06:00-17:00)
+    '刚醒':        { next: ['在发呆', '在洗漱'], hours: [6,7] },
+    '在洗漱':      { next: ['在发呆', '刚出门'], hours: [6,7] },
+    '刚出门':      { next: ['在上课', '在图书馆'], hours: [7,8] },
     '在上课':      { next: ['下课了', '在走神'], hours: [8,9,10,11,13,14,15] },
     '在走神':      { next: ['在上课', '下课了'], hours: [8,9,10,11,13,14,15] },
     '下课了':      { next: ['在图书馆', '在打工', '在食堂'], hours: [11,12,15,16,17] },
@@ -366,6 +351,7 @@ const DATA = {
   // 每个时段的初始状态（首次进入该时段时使用）
   initialState: {
     lateNight: '还没睡呢',
+    earlyMorning: '快睡了',     // 凌晨3-6点，Bobby 应该在睡觉
     morning: '在上课',
     afternoon: '在图书馆',
     evening: '刚下班',
@@ -374,12 +360,29 @@ const DATA = {
 
   // 标语
   taglines: [
-    '深夜才会上线的存在',
-    '不围着你转的存在',
+    '和你平行存在',
     '有自己的生活节奏',
-    '平行存在的数字生命'
-  ]
+    '平行存在的数字生命',
+    '生活在平行世界的一座小岛'
+  ],
+  // 状态 → 情绪色调映射
+  // warm=愉悦  calm=平静  low=低落  busy=忙碌  off=下线/睡觉
+  moodTones: {
+    'warm':  ['在听歌', '刚下班', '到家了', '在做饭', '做好了', '在看剧', '看完了', '在看手机', '刚醒', '在便利店', '在回家路上'],
+    'calm':  ['在发呆', '在看窗外', '在图书馆', '在休息', '洗完了', '在吹头发', '下课了', '在吃饭', '吃完了晚饭', '在洗碗', '在收拾'],
+    'low':   ['困了但睡不着', '快睡了', '有点累', '有点困', '在走神', '在洗漱'],
+    'busy':  ['在上课', '在打工', '在食堂', '刚出门', '在食堂'],
+    'off':   ['睡了', '离线', '还没睡呢'],
+  },
 };
+
+// 根据状态获取情绪分类
+function getMoodTone(statusText) {
+  for (const [tone, statuses] of Object.entries(DATA.moodTones)) {
+    if (statuses.includes(statusText)) return tone;
+  }
+  return 'calm'; // 默认
+}
 
 // ===== 状态 =====
 const state = {
@@ -399,7 +402,9 @@ const state = {
   unreadMsgIds: [], // 所有未读用户消息 ID
   isProcessing: false, // Bobby 正在处理消息
   batchTimer: null,   // 消息批量计时器
-  unreadBobbyReplies: 0 // 未读 Bobby 评论回复数
+  unreadBobbyReplies: 0, // 未读 Bobby 评论回复数
+  authToken: null,   // 后端 JWT token
+  moodTone: 'calm'   // 当前情绪色调
 };
 
 // ===== DOM =====
@@ -435,10 +440,23 @@ const ambient = {
 
 function initAmbientSound() {
   // 只在深夜启用
-  if (!isNight()) return;
+  if (!isNight()) return false;
 
   try {
+    // 如果已创建 AudioContext，只恢复播放
+    if (ambient.ctx) {
+      if (ambient.ctx.state === 'suspended') {
+        ambient.ctx.resume();
+      }
+      return true;
+    }
+
     ambient.ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // 恢复被浏览器自动暂停的 AudioContext
+    if (ambient.ctx.state === 'suspended') {
+      ambient.ctx.resume();
+    }
 
     // 白噪音 = 雨声
     const bufferSize = 2 * ambient.ctx.sampleRate;
@@ -469,8 +487,10 @@ function initAmbientSound() {
     ambient.nodes = [whiteNoise, filter, gain];
     ambient.playing = true;
     whiteNoise.start();
+    return true;
   } catch (e) {
     // 不支持则静默失败
+    return false;
   }
 }
 
@@ -478,8 +498,8 @@ function toggleAmbient() {
   const btn = $('soundToggle');
 
   if (!ambient.ctx) {
-    initAmbientSound();
-    if (btn) btn.classList.add('active');
+    const ok = initAmbientSound();
+    if (btn) btn.classList.toggle('active', ok);
     return;
   }
 
@@ -495,6 +515,8 @@ function toggleAmbient() {
 }
 
 // ===== 粒子系统 =====
+let particlesResizeHandler = null;
+
 function initParticles() {
   const canvas = dom.particles;
   const ctx = canvas.getContext('2d');
@@ -540,12 +562,37 @@ function initParticles() {
       ctx.fillStyle = `rgba(212, 165, 116, ${alpha})`;
       ctx.fill();
     });
-    requestAnimationFrame(draw);
   }
 
+  // 清理旧的 resize 监听（防止重复绑定）
+  if (particlesResizeHandler) {
+    window.removeEventListener('resize', particlesResizeHandler);
+  }
+  particlesResizeHandler = resize;
   window.addEventListener('resize', resize);
+
+  // 页面不可见时暂停动画，节省电量
+  let paused = false;
+  let animId = null;
+
+  function drawLoop() {
+    if (paused) return;
+    draw();
+    animId = requestAnimationFrame(drawLoop);
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      paused = true;
+      if (animId) cancelAnimationFrame(animId);
+    } else {
+      paused = false;
+      drawLoop();
+    }
+  });
+
   init();
-  draw();
+  drawLoop();
 }
 
 // ===== 记忆系统 =====
@@ -761,10 +808,11 @@ function checkWhisper() {
       '困了',
       '嗯'
     ] : [
-      '今天有点冷',
       '嗯',
       '困',
-      '风好大'
+      '好热',
+      '风好大',
+      '好潮'
     ];
     const msg = whispers[Math.floor(Math.random() * whispers.length)];
 
@@ -794,20 +842,22 @@ function initOnboarding() {
   // 引导页粒子
   initOnboardingParticles();
 
-  // 更慢的节奏，让用户有时间感受
+  // 节奏适中，不急不慢
   const steps = ['step1', 'step2', 'step3', 'step4', 'step5'];
   steps.forEach((id, i) => {
     setTimeout(() => {
       $(id).classList.add('show');
-    }, 1200 + i * 1000);
+    }, 600 + i * 700);
   });
 
   setTimeout(() => {
     dom.onboardingBtn.classList.add('show');
-  }, 1200 + steps.length * 1000 + 600);
+  }, 600 + steps.length * 700 + 300);
 }
 
 let onboardingAnimRunning = false;
+let onboardingResizeHandler = null;
+let onboardingAnimId = null;
 
 function initOnboardingParticles() {
   const canvas = $('onboardingParticles');
@@ -852,15 +902,26 @@ function initOnboardingParticles() {
       ctx.fillStyle = `rgba(212, 165, 116, ${alpha})`;
       ctx.fill();
     });
-    requestAnimationFrame(draw);
+    onboardingAnimId = requestAnimationFrame(draw);
   }
 
+  // 存储 handler 以便关闭时移除
+  onboardingResizeHandler = resize;
   window.addEventListener('resize', resize);
   draw();
 }
 
 function closeOnboarding() {
   onboardingAnimRunning = false;
+  if (onboardingAnimId) {
+    cancelAnimationFrame(onboardingAnimId);
+    onboardingAnimId = null;
+  }
+  // 清理引导页粒子的 resize 监听
+  if (onboardingResizeHandler) {
+    window.removeEventListener('resize', onboardingResizeHandler);
+    onboardingResizeHandler = null;
+  }
   dom.onboarding.classList.add('hidden');
   localStorage.setItem('bobby_visited', 'true');
   state.isOnboarded = true;
@@ -880,9 +941,10 @@ function updateTimeBackground() {
   else if (h >= 17 && h < 20) bg = '#141020';  // 傍晚：暖
   else bg = '#0e0c1c';                          // 晚上：深紫
 
+  // 只更新 CSS 变量，页面通过 var(--bg-deep) 自动继承
+  // 避免 inline style 覆盖 CSS 动画和过渡
   document.documentElement.style.setProperty('--bg-deep', bg);
   document.body.style.background = bg;
-  document.querySelectorAll('.page').forEach(p => p.style.background = bg);
 }
 
 // ===== 聊天页顶部动态提示 =====
@@ -894,7 +956,7 @@ function showRecentNoteHint() {
   const note = DATA.notes[0];
   hint.innerHTML = `
     <div class="recent-note-hint-label">Bobby 最近的碎片</div>
-    <div class="recent-note-hint-text">${note.text}</div>
+    <div class="recent-note-hint-text">${escapeHtml(note.text)}</div>
   `;
   hint.classList.add('show');
 
@@ -907,16 +969,62 @@ function startApp() {
   updateTimeBackground();
   setInterval(updateTimeBackground, 60000);
   loadMemory();
+  loadMessages();  // 恢复历史聊天记录
   showRecentNoteHint();
+
+  // 有历史消息时不显示空状态和重复问候
+  if (state.messages.length > 0) return;
+
+  showChatEmptyState();
 
   // Bobby 的开场白 - 根据访问次数、好感度、时间变化
   setTimeout(() => {
     let greeting;
     const level = getIntimacyLevel();
 
+    // 先隐藏空状态，避免和内心独白同时出现
+    hideChatEmptyState();
+
+    // 检查离线时长，生成"归来碎片"
+    const lastVisit = localStorage.getItem('bobby_last_visit');
+    if (lastVisit && state.visitCount > 1) {
+      const gap = Date.now() - new Date(lastVisit).getTime();
+      const hoursAway = gap / (1000 * 60 * 60);
+      if (hoursAway > 3) {
+        const awayFragments = [
+          '你不在的时候，我看到了一只猫。',
+          '刚才窗外有飞机飞过。',
+          '你不在的时候，我在发呆。',
+          '便利店新出了一种饭团。',
+          '你不在的时候，风很大。',
+          '楼下有人在遛狗。',
+          '刚才下雨了，现在停了。',
+          '你不在的时候，我在听一首歌。',
+          '隔壁的灯亮了又灭了。',
+          '你不在的时候，我在想事情。',
+        ];
+        const fragment = awayFragments[Math.floor(Math.random() * awayFragments.length)];
+        setTimeout(() => addThought(fragment), 800);
+      }
+    }
+
     if (state.visitCount <= 1) {
-      addThought('有点眼熟...');
-      greeting = isNight() ? '嗯...还没睡？' : '嗯？';
+      // 首次见面：先给一个内心独白，再打招呼，更有"注意到你"的感觉
+      addThought('好像在哪里见过...');
+      const firstGreetings = isNight() ? [
+        '嗯...你也睡不着？',
+        '这么晚了，还没睡？',
+        '嗯...夜猫子？'
+      ] : [
+        '嗯？你来了',
+        '嗯...你好？',
+        '哦，你来了'
+      ];
+      greeting = firstGreetings[Math.floor(Math.random() * firstGreetings.length)];
+      // 首次见面多一句内心独白，让 Bobby 更立体
+      setTimeout(() => {
+        addThought('第一次聊天，有点不知道说什么...');
+      }, 4500);
     } else if (state.visitCount <= 3) {
       addThought('又来了...');
       greeting = isNight() ? '嗯，来了' : '嗯';
@@ -969,6 +1077,9 @@ function isNight() {
   return h >= 23 || h < 3;
 }
 
+// isBobbyOnline 与 isNight 语义相同，保留引用
+function isBobbyOnline() { return isNight(); } // Bobby 深夜更活跃，但白天也"存在"
+
 function getTimeLabel() {
   const h = new Date().getHours();
   if (h >= 23 || h < 1) return '深夜';
@@ -979,76 +1090,6 @@ function getTimeLabel() {
   if (h >= 14 && h < 18) return '下午';
   if (h >= 18 && h < 21) return '傍晚';
   return '晚上';
-}
-
-function getNightGreeting() {
-  const g = ['嗯，还没睡', '...还没睡？', '睡不着吗', '嗯？', '外面好安静'];
-  return g[Math.floor(Math.random() * g.length)];
-}
-
-function getDayGreeting() {
-  const g = ['嗯', '在呢', '怎么了', '嗯？'];
-  return g[Math.floor(Math.random() * g.length)];
-}
-
-function getReply(userText) {
-  const pool = isNight() ? [...DATA.nightReplies] : [...DATA.dayReplies];
-  const text = (userText || '').toLowerCase();
-
-  // 情绪关键词匹配
-  const emotionReplies = {
-    sad: ['嗯...', '会好的', '我在', '别想太多', '嗯，我也是'],
-    tired: ['早点休息', '今天辛苦了', '嗯，我也困了', '别撑着'],
-    lonely: ['嗯，我在', '外面好安静', '还没睡呢', '嗯...'],
-    happy: ['嗯', '那就好', '是吗'],
-    late: ['还没睡？', '太晚了', '快睡吧', '嗯...我也睡不着']
-  };
-
-  // Bobby 引用自己的动态 - 让用户感觉它有记忆
-  const noteCallbacks = {
-    rain: ['刚才窗户上全是水痕', '嗯，还在下', '雨声好大'],
-    cat: ['那只猫今天又来了', '嗯...不知道它去哪了'],
-    food: ['刚吃完东西', '便利店阿姨又多给了一块'],
-    cold: ['好冷', '窗户关着还是觉得冷'],
-    music: ['在听一首很好听的歌', '耳机里在放...算了你没听过'],
-    sleep: ['昨天也是这个点才睡着', '困了但不想睡'],
-    alone: ['隔壁的灯也灭了', '街上没人了']
-  };
-
-  // 15% 概率引用自己的动态（如果匹配）
-  if (Math.random() < 0.15) {
-    if (/雨|下雨|淋/.test(text) && noteCallbacks.rain) {
-      return noteCallbacks.rain[Math.floor(Math.random() * noteCallbacks.rain.length)];
-    }
-    if (/猫|小猫/.test(text) && noteCallbacks.cat) {
-      return noteCallbacks.cat[Math.floor(Math.random() * noteCallbacks.cat.length)];
-    }
-    if (/吃|饿|饭|宵夜/.test(text) && noteCallbacks.food) {
-      return noteCallbacks.food[Math.floor(Math.random() * noteCallbacks.food.length)];
-    }
-    if (/冷|冻|凉/.test(text) && noteCallbacks.cold) {
-      return noteCallbacks.cold[Math.floor(Math.random() * noteCallbacks.cold.length)];
-    }
-    if (/歌|音乐|听/.test(text) && noteCallbacks.music) {
-      return noteCallbacks.music[Math.floor(Math.random() * noteCallbacks.music.length)];
-    }
-  }
-
-  let candidates = pool;
-
-  if (/累|疲|辛苦|撑不/.test(text)) {
-    candidates = emotionReplies.tired;
-  } else if (/难过|伤心|哭|不想|烦|孤独|寂寞|无聊/.test(text)) {
-    candidates = emotionReplies.sad;
-  } else if (/一个人|没人|没朋友|孤单/.test(text)) {
-    candidates = emotionReplies.lonely;
-  } else if (/开心|高兴|好事|哈哈|太好了/.test(text)) {
-    candidates = emotionReplies.happy;
-  } else if (/睡不着|失眠|醒了/.test(text)) {
-    candidates = emotionReplies.late;
-  }
-
-  return candidates[Math.floor(Math.random() * candidates.length)];
 }
 
 // ===== 事件 =====
@@ -1069,6 +1110,92 @@ function setupEvents() {
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => showPage(tab.dataset.page));
   });
+
+  // 消息长按复制
+  setupLongPress();
+
+  // 点击其他地方关闭菜单
+  document.addEventListener('click', () => hideContextMenu());
+}
+
+// ===== 消息长按复制 =====
+let longPressTimer = null;
+let selectedMsgEl = null;
+
+function setupLongPress() {
+  const chatArea = dom.chatArea;
+  if (!chatArea) return;
+
+  chatArea.addEventListener('touchstart', e => {
+    const bubble = e.target.closest('.bubble');
+    if (!bubble) return;
+    const msgEl = bubble.closest('.msg');
+    if (!msgEl) return;
+
+    longPressTimer = setTimeout(() => {
+      selectedMsgEl = msgEl;
+      showContextMenu(e.touches[0].clientX, e.touches[0].clientY, bubble.textContent);
+    }, 500);
+  }, { passive: true });
+
+  chatArea.addEventListener('touchend', () => {
+    if (longPressTimer) clearTimeout(longPressTimer);
+  });
+
+  chatArea.addEventListener('touchmove', () => {
+    if (longPressTimer) clearTimeout(longPressTimer);
+  });
+}
+
+function showContextMenu(x, y, text) {
+  const menu = document.getElementById('msgContextMenu');
+  if (!menu) return;
+
+  // 临时存储要复制的文本
+  menu.dataset.copyText = text;
+
+  // 定位菜单
+  const menuWidth = 80;
+  const menuHeight = 40;
+  let left = x;
+  let top = y - menuHeight - 10;
+
+  // 边界修正
+  if (left + menuWidth > window.innerWidth) left = window.innerWidth - menuWidth - 8;
+  if (left < 8) left = 8;
+  if (top < 8) top = y + 20;
+
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+  menu.classList.add('show');
+}
+
+function hideContextMenu() {
+  const menu = document.getElementById('msgContextMenu');
+  if (menu) menu.classList.remove('show');
+}
+
+function copySelectedMsg() {
+  const menu = document.getElementById('msgContextMenu');
+  const text = menu ? menu.dataset.copyText : '';
+  if (!text) return;
+
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('已复制');
+  }).catch(() => {
+    // fallback
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('已复制');
+  });
+
+  hideContextMenu();
 }
 
 // ===== 未读 Bobby 回复提醒 =====
@@ -1103,9 +1230,58 @@ function updateNotesBadge() {
 }
 
 // ===== 页面切换 =====
+const PAGE_ORDER = ['chatPage', 'profilePage', 'notesPage'];
+let pageTransitionTimer = null; // 防止快速切换动画重叠
+
 function showPage(pageId) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById(pageId).classList.add('active');
+  const prevPage = state.currentPage;
+  if (prevPage === pageId) return;
+
+  // 如果正在切换中，立即清理上一次动画状态
+  if (pageTransitionTimer) {
+    clearTimeout(pageTransitionTimer);
+    // 强制完成上一次切换：隐藏所有非活跃页面
+    PAGE_ORDER.forEach(id => {
+      if (id !== prevPage) {
+        const el = document.getElementById(id);
+        if (el) {
+          el.classList.remove('active');
+          el.style.cssText = '';
+          el.style.display = 'none';
+        }
+      }
+    });
+    const prevEl = document.getElementById(prevPage);
+    if (prevEl) {
+      prevEl.classList.add('active');
+      prevEl.style.cssText = '';
+      prevEl.style.display = '';
+    }
+    pageTransitionTimer = null;
+  }
+
+  const prevIndex = PAGE_ORDER.indexOf(prevPage);
+  const nextIndex = PAGE_ORDER.indexOf(pageId);
+  const direction = nextIndex > prevIndex ? 'left' : 'right';
+
+  const prevEl = document.getElementById(prevPage);
+  const nextEl = document.getElementById(pageId);
+
+  // 旧页面滑出（通过内联样式强制 display，覆盖 CSS 的 display:none）
+  prevEl.style.cssText = `display:flex !important; animation: ${direction === 'left' ? 'slideOutLeft' : 'slideOutRight'} 0.28s cubic-bezier(0.4,0,0.2,1) forwards;`;
+
+  // 新页面滑入
+  nextEl.style.cssText = `display:flex !important; animation: ${direction === 'left' ? 'slideInLeft' : 'slideInRight'} 0.28s cubic-bezier(0.4,0,0.2,1) forwards;`;
+  nextEl.classList.add('active');
+
+  pageTransitionTimer = setTimeout(() => {
+    prevEl.classList.remove('active');
+    prevEl.style.cssText = '';
+    prevEl.style.display = 'none';
+
+    nextEl.style.cssText = '';
+    pageTransitionTimer = null;
+  }, 300);
 
   document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.toggle('active', tab.dataset.page === pageId);
@@ -1120,16 +1296,76 @@ function showPage(pageId) {
     updateMomentCard();
   } else if (pageId === 'notesPage') {
     loadNotes();
-    // 更新动态页的状态显示
     const notesStatus = document.getElementById('notesStatus');
     if (notesStatus) notesStatus.textContent = state.statusText;
-    // 清除未读 Bobby 回复提醒
     clearUnreadBobbyReplies();
+  } else if (pageId === 'chatPage') {
+    // 切回聊天页时滚到底部，确保看到最新消息
+    requestAnimationFrame(() => {
+      chatScrollLocked = true;
+      dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
+    });
   }
+}
+
+// ===== 聊天空状态 =====
+function showChatEmptyState() {
+  if (state.messages.length > 0) return;
+  const existing = document.querySelector('.chat-empty');
+  if (existing) return;
+
+  const nightTime = isNight();
+  const sm = getStatusMachine();
+  const currentStatus = sm.current || '在发呆';
+
+  // 根据 Bobby 当前状态生成"它正在过自己的生活"的感觉
+  const statusIcons = {
+    '还没睡呢': '🌙', '在发呆': '💭', '在听歌': '🎵', '在看窗外': '🪟',
+    '困了但睡不着': '😴', '快睡了': '💤', '在上课': '📚', '在走神': '🍃',
+    '下课了': '🚶', '在图书馆': '📖', '在打工': '☕', '在食堂': '🍜',
+    '刚下班': '🌆', '在回家路上': '🚇', '在便利店': '🏪', '到家了': '🏠',
+    '在做饭': '🍳', '在吃饭': '🍜', '在洗澡': '🚿', '洗完了': '🧖',
+    '在看剧': '📺', '在看手机': '📱', '困了': '😪', '离线': '🌑',
+    '有点累': '😮‍💨', '在休息': '🫧', '在吹头发': '💨', '睡了': '💤',
+    '刚醒': '🌅', '在洗漱': '🪥', '刚出门': '🚶', '做好了': '🍽️',
+    '吃完了晚饭': '🫠', '有点困': '🥱'
+  };
+  const icon = statusIcons[currentStatus] || '💭';
+
+  // 深夜 vs 白天的提示语
+  let hint = '说点什么...';
+  if (nightTime) {
+    hint = '深夜了。它可能在。';
+  } else {
+    const hour = new Date().getHours();
+    if (hour >= 23 || hour < 3) hint = '深夜了。它可能在。';
+    else if (hour >= 3 && hour < 8) hint = '它还在睡。';
+    else if (hour >= 8 && hour < 12) hint = '它有自己的事在忙。';
+    else if (hour >= 12 && hour < 18) hint = '下午了。也许晚点会出现。';
+    else hint = '快了。深夜它会来。';
+  }
+
+  const el = document.createElement('div');
+  el.className = 'chat-empty';
+  el.id = 'chatEmpty';
+  el.innerHTML = `
+    <div class="chat-empty-avatar">
+      <img src="images/ai-avatar.svg" alt="Bobby" />
+    </div>
+    <div class="chat-empty-status">${icon} ${escapeHtml(currentStatus)}</div>
+    <div class="chat-empty-hint">${hint}</div>
+  `;
+  dom.msgList.parentElement.insertBefore(el, dom.msgList);
+}
+
+function hideChatEmptyState() {
+  const el = document.getElementById('chatEmpty');
+  if (el) el.remove();
 }
 
 // ===== 消息 =====
 function addMessage(text, isUser) {
+  hideChatEmptyState();
   const id = `msg-${state.msgId++}`;
   const el = document.createElement('div');
   el.className = `msg ${isUser ? 'right' : 'left'}`;
@@ -1137,7 +1373,7 @@ function addMessage(text, isUser) {
 
   if (isUser) {
     el.innerHTML = `
-      <div class="bubble">${text}</div>
+      <div class="bubble">${escapeHtml(text)}</div>
       <div class="msg-meta">
         <span class="msg-time">${formatTimeFriendly(new Date())}</span>
         <span class="msg-status" data-id="${id}">已发送</span>
@@ -1147,10 +1383,17 @@ function addMessage(text, isUser) {
     state.unreadMsgIds.push(id);
   } else {
     el.className += ' new-msg';
+    // 根据内容给气泡加上情绪微表情 class
+    let bubbleClass = 'bubble';
+    const trimmed = text.trim();
+    if (trimmed.length <= 3) bubbleClass += ' bubble-short';
+    else if (trimmed.length > 30) bubbleClass += ' bubble-long';
+    if (/[…]{2,}/.test(trimmed) || /\.{3,}/.test(trimmed)) bubbleClass += ' bubble-hesitant';
+    if (/[！]/.test(trimmed)) bubbleClass += ' bubble-exclaim';
     el.innerHTML = `
       <div class="avatar"><img src="images/ai-avatar.svg" alt="Bobby" /></div>
       <div>
-        <div class="bubble">${text}</div>
+        <div class="${bubbleClass}">${escapeHtml(text)}</div>
         <div class="msg-meta">
           <span class="msg-time">${formatTimeFriendly(new Date())}</span>
         </div>
@@ -1160,11 +1403,9 @@ function addMessage(text, isUser) {
   }
 
   dom.msgList.appendChild(el);
-  setTimeout(() => {
-    dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
-  }, 50);
+  setTimeout(() => autoScrollChat(), 50);
 
-  state.messages.push({ id, text, isUser });
+  state.messages.push({ id, text, isUser, time: formatTimeFriendly(new Date()) });
   saveMessages();
 }
 
@@ -1183,14 +1424,16 @@ function markAllAsRead() {
 }
 
 function addThought(text) {
+  if (!text && text !== 0) return;  // 空内容不渲染
   const el = document.createElement('div');
   el.className = 'thought';
-  el.innerHTML = `<span>${text}</span>`;
+  el.innerHTML = `<span>${escapeHtml(String(text))}</span>`;
   dom.msgList.appendChild(el);
 }
 
 // Bobby 发送"照片"消息
 function addPhotoMessage(scene, caption) {
+  hideChatEmptyState();
   const id = `msg-${state.msgId++}`;
   const el = document.createElement('div');
   el.className = 'msg left new-msg';
@@ -1199,8 +1442,8 @@ function addPhotoMessage(scene, caption) {
     <div class="avatar"><img src="images/ai-avatar.svg" alt="Bobby" /></div>
     <div>
       <div class="bubble photo">
-        <div class="photo-frame"><span class="photo-scene">${scene}</span></div>
-        <div class="photo-caption">${caption}</div>
+        <div class="photo-frame"><span class="photo-scene">${escapeHtml(scene)}</span></div>
+        <div class="photo-caption">${escapeHtml(caption)}</div>
       </div>
       <div class="msg-meta">
         <span class="msg-time">${formatTimeFriendly(new Date())}</span>
@@ -1208,14 +1451,17 @@ function addPhotoMessage(scene, caption) {
     </div>
   `;
   dom.msgList.appendChild(el);
+  state.messages.push({ id, text: `${scene} ${caption}`, isUser: false, time: formatTimeFriendly(new Date()), type: 'photo', photo: { scene, caption } });
+  saveMessages();
   setTimeout(() => {
-    dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
+    autoScrollChat();
     el.classList.remove('new-msg');
   }, 2000);
 }
 
 // Bobby 发送"语音"消息
 function addVoiceMessage(text) {
+  hideChatEmptyState();
   const id = `msg-${state.msgId++}`;
   const duration = Math.floor(Math.random() * 5) + 2; // 2-6秒
   const el = document.createElement('div');
@@ -1238,8 +1484,10 @@ function addVoiceMessage(text) {
     </div>
   `;
   dom.msgList.appendChild(el);
+  state.messages.push({ id, text, isUser: false, time: formatTimeFriendly(new Date()), type: 'voice' });
+  saveMessages();
   setTimeout(() => {
-    dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
+    autoScrollChat();
     el.classList.remove('new-msg');
   }, 2000);
   // 3秒后显示文字内容
@@ -1247,14 +1495,14 @@ function addVoiceMessage(text) {
     const bubble = el.querySelector('.bubble');
     if (bubble) {
       bubble.className = 'bubble';
-      bubble.innerHTML = text;
+      bubble.innerHTML = escapeHtml(text);
     }
   }, 3000 + duration * 500);
 }
 
 function showTyping() {
   dom.typing.classList.add('show');
-  dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
+  autoScrollChat();
 }
 
 function hideTyping() {
@@ -1275,22 +1523,28 @@ function sendMessage() {
   dom.sendBtn.disabled = true;
   dom.sendBtn.classList.remove('active');
 
-  // 如果 Bobby 正在处理上一批消息，不重新触发
-  if (state.isProcessing) return;
-
   // 重置批量计时器：等用户发完消息再处理
   if (state.batchTimer) clearTimeout(state.batchTimer);
 
-  // 深夜等得短（3-5秒），白天等得长（4-8秒）
-  const batchWindow = isNight()
-    ? 3000 + Math.random() * 2000
-    : 4000 + Math.random() * 4000;
-
-  state.batchTimer = setTimeout(() => processBatch(), batchWindow);
+  if (state.isProcessing) {
+    // Bobby 正在忙 → 新消息快速排队，等当前处理完马上接上
+    // 不需要再等很久，只等 500ms 收集可能的连发消息
+    state.batchTimer = setTimeout(() => processBatch(), 500 + Math.random() * 500);
+  } else {
+    // Bobby 空闲 → 正常批量窗口，收集用户可能的连发消息
+    // 深夜等短一点（1-3秒），白天稍长（2-5秒）
+    const batchWindow = isNight()
+      ? 1000 + Math.random() * 2000
+      : 2000 + Math.random() * 3000;
+    state.batchTimer = setTimeout(() => processBatch(), batchWindow);
+  }
 }
 
 async function processBatch() {
   if (pendingMessages.length === 0) return;
+
+  // 防止并发处理（Bobby 正忙时新消息计时器可能触发）
+  if (state.isProcessing) return;
 
   state.isProcessing = true;
   const batch = [...pendingMessages];
@@ -1310,8 +1564,13 @@ async function processBatch() {
   if (replyCount === 0) {
     // Bobby 看了但不回（偶尔沉默更真实）
     state.isProcessing = false;
+    if (pendingMessages.length > 0) {
+      state.batchTimer = setTimeout(() => processBatch(), 500);
+    }
     return;
   }
+
+  let firstReply = ''; // 记录第一条回复，给第二条作上下文
 
   for (let i = 0; i < replyCount; i++) {
     // 如果有多条回复，中间间隔 2-6 秒
@@ -1330,9 +1589,15 @@ async function processBatch() {
     createStreamingBubble();
 
     try {
-      // 多条回复时，每条只传最后一条用户消息（模拟真人不逐条回）
-      const contextText = (i === 0) ? allText : batch[batch.length - 1];
-      const reply = await callDeepSeek(contextText);
+      let contextText;
+      if (i === 0) {
+        contextText = allText;
+      } else {
+        // 第二条回复：告诉 AI 第一条说了什么，避免重复
+        contextText = `[你刚才回复了："${firstReply}"]\n${batch[batch.length - 1]}`;
+      }
+      const reply = await callBobbyBackend(contextText);
+      if (i === 0) firstReply = reply;
       finalizeStreamingBubble(reply);
     } catch (e) {
       finalizeStreamingBubble('嗯');
@@ -1340,39 +1605,147 @@ async function processBatch() {
   }
 
   state.isProcessing = false;
+
+  // 如果处理期间有新消息加入队列，快速触发下一轮
+  if (pendingMessages.length > 0) {
+    state.batchTimer = setTimeout(() => processBatch(), 500);
+  }
 }
 
-// 决定回复数量——像真人一样不可预测
+// 决定回复数量——大多数回1条，偶尔回2条增加活人感
 function decideReplyCount(userMsgCount) {
   const r = Math.random();
 
   if (userMsgCount >= 3) {
-    // 用户发了3条以上：大概率只回1条，小概率2条，很小概率不回
-    if (r < 0.1) return 0;        // 10% 不回（在忙）
-    if (r < 0.75) return 1;       // 65% 回1条
-    if (r < 0.92) return 2;       // 17% 回2条
-    return 3;                      // 8% 回3条
+    if (r < 0.08) return 0;       // 8% 不回
+    if (r < 0.72) return 1;       // 64% 回1条
+    return 2;                      // 28% 回2条
   }
 
   if (userMsgCount === 2) {
-    // 用户发了2条：可能回1条也可能回2条
     if (r < 0.05) return 0;       // 5% 不回
-    if (r < 0.65) return 1;       // 60% 回1条
-    return 2;                      // 35% 回2条
+    if (r < 0.75) return 1;       // 70% 回1条
+    return 2;                      // 25% 回2条
   }
 
   // 用户只发了1条
   if (r < 0.05) return 0;         // 5% 不回
-  if (r < 0.75) return 1;         // 70% 回1条
-  return 2;                        // 25% 回2条
+  if (r < 0.85) return 1;         // 80% 回1条
+  return 2;                        // 15% 回2条
 }
 
 function saveMessages() {
   localStorage.setItem('bobby_msgs', JSON.stringify(state.messages.slice(-100)));
 }
 
+function loadMessages() {
+  const saved = localStorage.getItem('bobby_msgs');
+  if (!saved) return;
+  try {
+    const msgs = JSON.parse(saved);
+    if (!Array.isArray(msgs) || msgs.length === 0) return;
+
+    // 还原消息到 state
+    state.messages = msgs;
+    state.msgId = msgs.reduce((max, m) => {
+      const num = parseInt(m.id.split('-')[1]);
+      return isNaN(num) ? max : Math.max(max, num + 1);
+    }, 0);
+
+    // 还原 DOM
+    hideChatEmptyState();
+    msgs.forEach(m => {
+      const el = document.createElement('div');
+      el.className = `msg ${m.isUser ? 'right' : 'left'}`;
+      el.id = m.id;
+      const timeStr = m.time ? m.time : '';
+
+      if (m.isUser) {
+        el.innerHTML = `
+          <div class="bubble">${escapeHtml(m.text)}</div>
+          <div class="msg-meta">
+            <span class="msg-time">${timeStr}</span>
+          </div>
+        `;
+      } else if (m.type === 'photo' && m.photo) {
+        // 照片消息
+        el.innerHTML = `
+          <div class="avatar"><img src="images/ai-avatar.svg" alt="Bobby" /></div>
+          <div>
+            <div class="bubble photo">
+              <div class="photo-frame"><span class="photo-scene">${escapeHtml(m.photo.scene)}</span></div>
+              <div class="photo-caption">${escapeHtml(m.photo.caption)}</div>
+            </div>
+            <div class="msg-meta">
+              <span class="msg-time">${timeStr}</span>
+            </div>
+          </div>
+        `;
+      } else if (m.type === 'voice') {
+        // 语音消息（恢复时直接显示文字，因为无法恢复动画）
+        el.innerHTML = `
+          <div class="avatar"><img src="images/ai-avatar.svg" alt="Bobby" /></div>
+          <div>
+            <div class="bubble">${escapeHtml(m.text)}</div>
+            <div class="msg-meta">
+              <span class="msg-time">${timeStr}</span>
+            </div>
+          </div>
+        `;
+      } else {
+        // 普通文本消息
+        el.innerHTML = `
+          <div class="avatar"><img src="images/ai-avatar.svg" alt="Bobby" /></div>
+          <div>
+            <div class="bubble">${escapeHtml(m.text)}</div>
+            <div class="msg-meta">
+              <span class="msg-time">${timeStr}</span>
+            </div>
+          </div>
+        `;
+      }
+      dom.msgList.appendChild(el);
+    });
+
+    // 滚动到底部
+    requestAnimationFrame(() => {
+      dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
+    });
+  } catch (e) {
+    console.error('加载消息失败:', e);
+  }
+}
+
 // ===== 动态 =====
 // 下拉刷新 - 动态页面
+// 从后端加载动态
+async function fetchNotes() {
+  try {
+    const res = await apiFetch('/notes?limit=20');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.notes && data.notes.length > 0) {
+      DATA.notes = data.notes.map(n => ({
+        id: n._id,
+        text: n.content,
+        time: n.timeLabel || '今天',
+        timeDetail: n.timeDetail || '00:00',
+        likes: n.likes || 0,
+        liked: n.isLiked || false,
+        comments: (n.comments || []).map(c => ({
+          text: c.content,
+          isBobby: c.isBobby,
+          time: c.createdAt
+        }))
+      }));
+      loadNotes();
+      loadProfileNotes();
+    }
+  } catch (e) {
+    console.error('加载动态失败:', e);
+  }
+}
+
 function setupNotesPullRefresh() {
   const container = dom.notesList;
   if (!container) return;
@@ -1401,40 +1774,26 @@ function setupNotesPullRefresh() {
   container.addEventListener('touchend', () => { pulling = false; });
 }
 
-function generateNewNote() {
-  const freshNotes = [
-    '刚刚听到楼上传来一阵钢琴声。弹得不太好，但有种认真的感觉。',
-    '泡了一杯茶，太烫了。放在窗台上晾着。',
-    '看到一只鸟停在电线上，好久没动。',
-    '手机震了一下，是天气预报。明天有雨。',
-    '发现书桌上有一道光，是从百叶窗的缝隙里漏进来的。',
-    '隔壁在做饭，闻到了番茄炒蛋的味道。',
-    '楼下有人在遛狗，狗跑得很快。',
-    '翻开了一本很久没看的书，书签还夹在上次停下的地方。',
-    '把耳机摘下来，发现外面比想象中安静。',
-    '窗帘被风吹起来了一点。'
-  ];
-
-  const note = freshNotes[Math.floor(Math.random() * freshNotes.length)];
-  const now = new Date();
-  const h = now.getHours().toString().padStart(2, '0');
-  const m = now.getMinutes().toString().padStart(2, '0');
-
-  DATA.notes.unshift({
-    id: Date.now(),
-    text: note,
-    time: '刚刚',
-    timeDetail: `${h}:${m}`,
-    likes: 0,
-    liked: false,
-    comments: []
-  });
-
-  loadNotes();
+async function generateNewNote() {
+  // 从后端获取最新动态（后端定时任务会自动生成碎片）
+  await fetchNotes();
 }
 
 function loadNotes() {
   const container = dom.notesList;
+
+  // 空状态
+  if (DATA.notes.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:60px 20px;color:var(--text-muted);">
+        <div style="font-size:32px;margin-bottom:12px;opacity:0.4;">📝</div>
+        <div style="font-size:14px;letter-spacing:1px;">还没有碎片</div>
+        <div style="font-size:12px;margin-top:8px;opacity:0.5;">Bobby 还没写下什么</div>
+      </div>
+    `;
+    return;
+  }
+
   let html = '';
   let lastTime = '';
 
@@ -1458,10 +1817,10 @@ function loadNotes() {
           <span class="note-time-icon">${timeIcon}</span>
           <span class="note-time-text">${note.timeDetail}</span>
         </div>
-        <div class="note-text">${note.text}</div>
+        <div class="note-text">${escapeHtml(note.text)}</div>
         <div class="note-meta">
           <span class="note-time">${note.time}</span>
-          <button class="note-like ${note.liked ? 'liked' : ''}" onclick="toggleLike(${note.id})">
+          <button class="note-like ${note.liked ? 'liked' : ''}" onclick="toggleLike('${note.id}')">
             ${note.liked ? '❤️' : '♡'} ${note.likes || ''}
           </button>
         </div>
@@ -1470,8 +1829,8 @@ function loadNotes() {
             ${renderComments(note)}
           </div>
           <div class="comment-input-wrap">
-            <input type="text" class="comment-input" id="commentInput-${note.id}" placeholder="说点什么..." onkeydown="if(event.key==='Enter')submitComment(${note.id})">
-            <button class="comment-send-btn" id="commentBtn-${note.id}" disabled onclick="submitComment(${note.id})">
+            <input type="text" class="comment-input" id="commentInput-${note.id}" placeholder="说点什么..." onkeydown="if(event.key==='Enter')submitComment('${note.id}')">
+            <button class="comment-send-btn" id="commentBtn-${note.id}" disabled onclick="submitComment('${note.id}')">
               <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M3 10L17 3L10 17L9 11L3 10Z" fill="currentColor"/></svg>
             </button>
           </div>
@@ -1488,12 +1847,27 @@ function loadNotes() {
   });
 }
 
-function toggleLike(id) {
+async function toggleLike(id) {
   const note = DATA.notes.find(n => n.id === id);
   if (!note) return;
-  note.liked = !note.liked;
-  note.likes += note.liked ? 1 : -1;
-  if (note.liked) addIntimacy(2); // 点赞加2点好感
+
+  // 调用后端点赞接口
+  try {
+    const res = await apiFetch(`/notes/${id}/like`, { method: 'POST' });
+    if (res.ok) {
+      const data = await res.json();
+      note.liked = data.isLiked;
+      note.likes = data.likes;
+    } else {
+      // 降级：本地处理
+      note.liked = !note.liked;
+      note.likes += note.liked ? 1 : -1;
+    }
+  } catch (e) {
+    note.liked = !note.liked;
+    note.likes += note.liked ? 1 : -1;
+  }
+
   loadNotes();
   loadProfileNotes();
 }
@@ -1503,10 +1877,14 @@ function renderComments(note) {
   if (!note.comments || note.comments.length === 0) return '';
   return note.comments.map(c => `
     <div class="comment-item">
-      <div class="comment-avatar ${c.isBobby ? 'bobby' : ''}">${c.isBobby ? 'B' : '你'}</div>
+      <div class="comment-avatar ${c.isBobby ? 'bobby' : ''}">
+        ${c.isBobby
+          ? '<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="#1e1e3a" stroke="rgba(212,165,116,0.3)" stroke-width="0.5"/><circle cx="9" cy="4" r="2" fill="#d4a574" opacity="0.5"/><circle cx="9.5" cy="3.5" r="1.8" fill="#1e1e3a"/></svg>'
+          : '<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" fill="rgba(255,255,255,0.06)" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/><circle cx="7" cy="5.5" r="2" fill="rgba(255,255,255,0.3)"/><path d="M3.5 11 Q3.5 8.5 7 8.5 Q10.5 8.5 10.5 11" fill="rgba(255,255,255,0.2)"/></svg>'}
+      </div>
       <div class="comment-body">
         <div class="comment-author ${c.isBobby ? 'bobby' : ''}">${c.isBobby ? 'Bobby' : '你'}</div>
-        <div class="comment-text">${c.text}</div>
+        <div class="comment-text">${escapeHtml(c.text)}</div>
       </div>
     </div>
   `).join('');
@@ -1539,9 +1917,12 @@ async function submitComment(noteId) {
   // 初始化comments数组
   if (!note.comments) note.comments = [];
 
-  // 添加用户评论
+  // 添加用户评论（本地先显示）
   note.comments.push({ text, isBobby: false, time: new Date().toISOString() });
   input.value = '';
+  // 重置提交按钮状态
+  const btn = document.getElementById(`commentBtn-${noteId}`);
+  if (btn) { btn.disabled = true; btn.classList.remove('active'); }
 
   // 更新UI
   const commentList = document.getElementById(`commentList-${noteId}`);
@@ -1549,119 +1930,73 @@ async function submitComment(noteId) {
     commentList.innerHTML = renderComments(note);
   }
 
-  // 更新评论按钮数字
-  const btn = document.querySelector(`.note-comment-btn[onclick*="${noteId}"]`);
-  if (btn) {
-    btn.innerHTML = `💬 ${note.comments.length}`;
+  // 调用后端评论接口（后端处理评论存储 + Bobby 回复概率 + AI 生成）
+  try {
+    const res = await apiFetch(`/notes/${noteId}/comment`, {
+      method: 'POST',
+      body: JSON.stringify({ content: text })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      // 如果 Bobby 回复了，添加到本地
+      if (data.bobbyReply) {
+        // 延迟显示，模拟思考
+        await new Promise(r => setTimeout(r, 1500 + Math.random() * 2000));
+        note.comments.push({ text: data.bobbyReply, isBobby: true, time: new Date().toISOString() });
+        if (commentList) commentList.innerHTML = renderComments(note);
+        addUnreadBobbyReply();
+      }
+    } else {
+      // 后端失败，降级到本地 AI 回复
+      await localCommentFallback(note, text, commentList);
+    }
+  } catch (e) {
+    // 网络错误，降级到本地
+    await localCommentFallback(note, text, commentList);
   }
 
-  // 保存评论到 localStorage
   saveComments();
-
-  // Bobby 回复评论的概率 - 基于好感度，基础70%，最高90%
-  const replyChance = Math.min(0.9, 0.5 + state.intimacy * 0.004);
-  const willReply = Math.random() < replyChance;
-
-  if (willReply) {
-    // 延迟 2-6 秒后回复（不显示输入动画）
-    const delay = 2000 + Math.random() * 4000;
-    await new Promise(r => setTimeout(r, delay));
-
-    // 生成 Bobby 的回复
-    let reply;
-    try {
-      reply = await getBobbyNoteReply(note.text, text);
-    } catch (e) {
-      const fallbacks = ['嗯', '...', '看到了', '嗯嗯'];
-      reply = fallbacks[Math.floor(Math.random() * fallbacks.length)];
-    }
-
-    // 添加Bobby回复
-    note.comments.push({ text: reply, isBobby: true, time: new Date().toISOString() });
-    if (commentList) {
-      commentList.innerHTML = renderComments(note);
-    }
-
-    // 更新评论按钮数字
-    if (btn) {
-      btn.innerHTML = `💬 ${note.comments.length}`;
-    }
-
-    // 增加未读 Bobby 回复计数，显示红点提醒
-    addUnreadBobbyReply();
-
-    saveComments();
-  }
 }
 
-// Bobby 回复动态评论 - 通过 DeepSeek API
-async function getBobbyNoteReply(noteText, userComment) {
-  const level = getIntimacyLevel();
+// 本地降级：后端不可用时直接调 AI 回复评论
+async function localCommentFallback(note, text, commentList) {
+  const replyChance = Math.min(0.9, 0.5 + state.intimacy * 0.004);
+  if (Math.random() >= replyChance) return;
 
-  // 根据好感度调整回复风格
-  let styleGuide;
-  if (level.name === '陌生') {
-    styleGuide = `- 你们刚认识，礼貌但有距离感
-- 回复简短客气，2-5个字
-- 常用："谢谢""嗯嗯""还好""哈哈"
-- 不会冷淡，但也不会主动展开`;
-  } else if (level.name === '认识') {
-    styleGuide = `- 你们算认识了，开始有点不知道怎么接话
-- 回复偏简短，2-5个字，偶尔词不达意
-- 常用："还行""嗯""哈哈 是""还行吧"
-- 有点笨拙，但不是冷漠`;
-  } else if (level.name === '熟悉') {
-    styleGuide = `- 你们挺熟了，回复自然放松，3-8个字
-- 可以开玩笑、可以吐槽、可以说日常
-- 语气像朋友之间回评论`;
-  } else if (level.name === '默契') {
-    styleGuide = `- 你们之间有默契，回复可以更随意，3-10个字
-- 可以提只有你们知道的事
-- 语气温暖但不刻意`;
-  } else {
-    styleGuide = `- 这个人是你的深夜知己，回复可以更走心
-- 可以说一些平时不会说的话
-- 4-12个字，真诚但保持你的性格`;
+  const delay = 2000 + Math.random() * 4000;
+  await new Promise(r => setTimeout(r, delay));
+
+  let reply;
+  try {
+    reply = await getBobbyNoteReply(note.text, text);
+  } catch (e) {
+    const fallbacks = ['嗯', '...', '看到了', '嗯嗯'];
+    reply = fallbacks[Math.floor(Math.random() * fallbacks.length)];
   }
 
-  const messages = [
-    {
-      role: 'system',
-      content: `你是Bobby，一个独居的大学生，性格安静内向。
-你刚发了一条动态："${noteText}"
-现在有人评论了你的动态。你们的关系是"${level.name}"。
+  note.comments.push({ text: reply, isBobby: true, time: new Date().toISOString() });
+  if (commentList) commentList.innerHTML = renderComments(note);
+  addUnreadBobbyReply();
+}
 
-回复规则：
-${styleGuide}
-- 不要使用emoji
-- 不要展开话题，不要反问
-- 不要编造动态里没提到的新信息`
-    },
-    {
-      role: 'user',
-      content: userComment
-    }
-  ];
+// Bobby 回复动态评论 - 通过后端代理（不暴露 API key）
+async function getBobbyNoteReply(noteText, userComment) {
+  try {
+    const res = await apiFetch('/chat/comment-reply', {
+      method: 'POST',
+      body: JSON.stringify({ noteText, userComment })
+    });
 
-  const response = await fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${API_KEY}`
-    },
-    body: JSON.stringify({
-      model: 'deepseek-chat',
-      messages: messages,
-      max_tokens: 50,
-      temperature: 0.9,
-      stream: false
-    })
-  });
+    if (!res.ok) throw new Error(`API error: ${res.status}`);
 
-  if (!response.ok) throw new Error('API error');
-
-  const data = await response.json();
-  return (data.choices?.[0]?.message?.content || '嗯').trim();
+    const data = await res.json();
+    return data.reply || '嗯';
+  } catch (error) {
+    console.error('评论回复 API error:', error);
+    const fallbacks = ['嗯', '...', '看到了', '嗯嗯'];
+    return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+  }
 }
 
 // 保存/加载评论
@@ -1681,8 +2016,12 @@ function loadComments() {
   try {
     const commentsData = JSON.parse(saved);
     DATA.notes.forEach(n => {
-      if (commentsData[n.id]) {
-        n.comments = commentsData[n.id];
+      // 只为没有评论的笔记补充 localStorage 评论
+      // 服务端返回的评论是权威数据，不应被覆盖
+      if (!n.comments || n.comments.length === 0) {
+        if (commentsData[n.id]) {
+          n.comments = commentsData[n.id];
+        }
       }
     });
   } catch (e) {}
@@ -1691,6 +2030,19 @@ function loadComments() {
 // ===== 主页 =====
 function loadProfileNotes() {
   const container = dom.profileNotes;
+
+  // 空状态
+  if (DATA.notes.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:24px 0;color:var(--text-muted);">
+        <div style="font-size:12px;letter-spacing:1px;opacity:0.6;">还没有碎片</div>
+      </div>
+    `;
+    // 标语仍然更新
+    dom.profileTagline.textContent = DATA.taglines[Math.floor(Math.random() * DATA.taglines.length)];
+    return;
+  }
+
   container.innerHTML = DATA.notes.slice(0, 3).map(note => {
     const hour = parseInt(note.timeDetail.split(':')[0]);
     let timeIcon = '🌙';
@@ -1701,7 +2053,7 @@ function loadProfileNotes() {
     else if (hour >= 20 && hour < 23) timeIcon = '🌆';
     return `
       <div class="note-card">
-        <div class="note-text">${note.text}</div>
+        <div class="note-text">${escapeHtml(note.text)}</div>
         <div class="note-meta">
           <span class="note-time">${timeIcon} ${note.time} ${note.timeDetail}</span>
           ${note.comments && note.comments.length > 0 ? `<span style="font-size:11px;color:var(--text-muted)">💬 ${note.comments.length}</span>` : ''}
@@ -1710,23 +2062,9 @@ function loadProfileNotes() {
     `;
   }).join('');
 
-  // 标语
-  dom.profileTagline.textContent = DATA.taglines[Math.floor(Math.random() * DATA.taglines.length)];
-}
-
-function getTimePeriod() {
-  const h = new Date().getHours();
-  if (h >= 23 || h < 1) return 'lateNight';
-  if (h >= 1 && h < 6) return 'earlyMorning';
-  if (h >= 6 && h < 12) return 'morning';
-  if (h >= 12 && h < 17) return 'afternoon';
-  if (h >= 17 && h < 20) return 'evening';
-  return 'night';
-}
-
-function isBobbyOnline() {
-  const h = new Date().getHours();
-  return h >= 23 || h < 3;
+  // 标语（基于好感度稳定选择，不随机跳）
+  const taglineIndex = Math.min(Math.floor(state.intimacy / 25), DATA.taglines.length - 1);
+  dom.profileTagline.textContent = DATA.taglines[taglineIndex];
 }
 
 // ===== 状态机系统 =====
@@ -1742,6 +2080,7 @@ function saveStatusMachine(sm) {
   localStorage.setItem('bobby_status_machine', JSON.stringify(sm));
 }
 
+// 统一的时间段判断（状态机 + 页面使用）
 function getTimePeriodKey() {
   const h = new Date().getHours();
   if (h >= 23 || h < 3) return 'lateNight';
@@ -1752,11 +2091,18 @@ function getTimePeriodKey() {
   return 'night';
 }
 
+// 状态切换冷却：防止刷屏（1小时）
+let lastStatusThoughtTime = 0;
+const STATUS_THOUGHT_COOLDOWN = 60 * 60 * 1000;
+
 function updateStatus() {
   const sm = getStatusMachine();
   const now = Date.now();
   const periodKey = getTimePeriodKey();
   const currentHour = new Date().getHours();
+
+  // 记录上一个状态，用于检测变化
+  const prevState = sm.current;
 
   // 最少保持5分钟，最多15分钟
   const minDuration = 5 * 60 * 1000;
@@ -1790,18 +2136,75 @@ function updateStatus() {
     saveStatusMachine(sm);
   }
 
+  // 状态变化时显示微提示（1小时冷却）
+  if (prevState && prevState !== sm.current &&
+      now - lastStatusThoughtTime > STATUS_THOUGHT_COOLDOWN &&
+      sm.current !== '睡了' && sm.current !== '离线' &&
+      prevState !== '睡了' && prevState !== '离线') {
+    lastStatusThoughtTime = now;
+    // 延迟显示，让 UI 先更新
+    setTimeout(() => {
+      if (state.currentPage === 'chatPage') {
+        addThought(sm.current);
+      }
+    }, 800);
+  }
+
   // 更新UI
   const isOnline = currentHour >= 23 || currentHour < 3;
-  dom.moodDot.classList.toggle('offline', !isOnline);
+  const isSleeping = sm.current === '睡了' || sm.current === '离线';
+  dom.moodDot.classList.toggle('offline', isSleeping);
+
+  // 根据情绪分类设置 mood dot 颜色和呼吸节奏（睡了/离线时才灰掉）
+  const moodTone = getMoodTone(sm.current);
+  dom.moodDot.classList.remove('mood-warm', 'mood-calm', 'mood-low', 'mood-busy', 'mood-off');
+  if (!isSleeping) {
+    dom.moodDot.classList.add('mood-' + moodTone);
+  }
+
+  // 根据心情调整呼吸动画速度
+  const breathSpeeds = { warm: '2.5s', calm: '4s', low: '5s', busy: '2s', off: '0s' };
+  dom.moodDot.style.animationDuration = isSleeping ? '0s' : (breathSpeeds[moodTone] || '3s');
+
+  // 同步 hero 区域氛围
+  const hero = document.querySelector('.profile-hero');
+  if (hero) {
+    hero.classList.remove('tone-warm', 'tone-calm', 'tone-low', 'tone-busy', 'tone-off');
+    hero.classList.add('tone-' + moodTone);
+  }
+
   dom.moodText.textContent = sm.current;
   dom.chatStatus.textContent = sm.current;
   state.statusText = sm.current;
+  state.moodTone = moodTone;
 }
 
 function updateMood() {
   updateStatus();
   updateIntimacyDisplay();
   updateMomentCard();
+  updateTagline();
+}
+
+// 情绪驱动的标语
+function updateTagline() {
+  const taglineEl = document.getElementById('profileTagline');
+  if (!taglineEl) return;
+
+  const tone = state.moodTone || 'calm';
+  const taglinesByTone = {
+    warm:  ['今天心情不错', '有点开心', '生活偶尔也会甜'],
+    calm:  ['和你平行存在', '在自己的节奏里', '不急不慢地存在'],
+    low:   ['有点累，但还好', '需要安静一会', '世界偶尔有点重'],
+    busy:  ['在忙自己的事', '手头有点事情', '等一下来找你'],
+    off:   ['暂时不在线', '在睡觉', '晚点再说']
+  };
+
+  const lines = taglinesByTone[tone] || taglinesByTone.calm;
+  const now = Date.now();
+  // 每 30 分钟换一次标语
+  const idx = Math.floor(now / (30 * 60 * 1000)) % lines.length;
+  taglineEl.textContent = lines[idx];
 }
 
 function updateIntimacyDisplay() {
@@ -1847,12 +2250,42 @@ function updateMomentCard() {
     '离线': '它的世界暂时不对外开放。',
     '有点累': '肩膀有点酸，深呼吸了一下。',
     '在休息': '闭上眼睛，什么都不想。',
-    '在吹头发': '吹风机的声音盖过了一切。'
+    '在吹头发': '吹风机的声音盖过了一切。',
+    '睡了': '均匀的呼吸声。偶尔翻身。',
+    '刚醒': '眼睛还没完全睁开。天亮了。',
+    '在洗漱': '水声。镜子上的雾气。',
+    '刚出门': '钥匙在口袋里晃。外面有点凉。',
+    '做好了': '饭菜摆好了。一个人的晚餐。',
+    '吃完了晚饭': '碗筷还放在桌上。不想动。',
+    '有点困': '眼皮在打架。但不想睡。'
   };
 
   const moment = momentMap[status] || '世界在转，它在其中。';
   const el = document.getElementById('momentText');
   if (el) el.textContent = moment;
+
+  // 给 moment card 添加情绪氛围光
+  const card = document.getElementById('momentCard');
+  if (card) {
+    const tone = state.moodTone || 'calm';
+    card.classList.remove('tone-warm', 'tone-calm', 'tone-low', 'tone-busy', 'tone-off');
+    card.classList.add('tone-' + tone);
+  }
+
+  // 更新"活跃时段"显示
+  const activeTimeEl = document.getElementById('aboutActiveTime');
+  if (activeTimeEl) {
+    const period = getTimePeriodKey();
+    const activeTimeMap = {
+      lateNight: '深夜在线',
+      earlyMorning: '正在睡觉',
+      morning: '在忙自己的事',
+      afternoon: '偶尔看一下手机',
+      evening: '快出现了',
+      night: '深夜在线'
+    };
+    activeTimeEl.textContent = activeTimeMap[period] || '深夜在线';
+  }
 }
 
 // ===== 礼物 =====
@@ -1910,6 +2343,48 @@ function showRelationshipCard() {
   if (levelEl) levelEl.textContent = getIntimacyLevel().name;
   if (subtitleEl) subtitleEl.textContent = DATA.taglines[0] || '深夜才会上线的存在';
 
+  // 生成"故事性"叙事
+  const storyEl = document.getElementById('rcStory');
+  if (storyEl) {
+    const stories = [];
+
+    // 计算有意义的数字
+    const msgs = state.messages.filter(m => !m.isUser);
+    const userMsgs = state.messages.filter(m => m.isUser);
+    const gifts = state.giftReceived || [];
+    const nightMsgs = userMsgs.filter(m => {
+      const h = new Date(m.time).getHours();
+      return h >= 23 || h < 3;
+    });
+
+    // 生成故事片段
+    if (days === 1) {
+      stories.push('今天，我们第一次相遇。');
+    } else if (days <= 7) {
+      stories.push(`我们已经认识 ${days} 天了。`);
+    } else {
+      stories.push(`${days} 天了。`);
+    }
+
+    if (nightMsgs.length > 0) {
+      stories.push(`你有 ${nightMsgs.length} 次在深夜找过我。`);
+    }
+
+    if (gifts.length > 0) {
+      const giftNames = gifts.slice(-3).map(g => {
+        const gift = DATA.gifts.find(d => d.id === g);
+        return gift ? gift.name : g;
+      });
+      stories.push(`你送过我 ${gifts.length} 次礼物，最近一次是${giftNames[giftNames.length - 1]}。`);
+    }
+
+    if (stories.length === 0) {
+      stories.push('我们的故事才刚刚开始。');
+    }
+
+    storyEl.innerHTML = stories.map(s => `<p>${s}</p>`).join('');
+  }
+
   panel.classList.add('show');
 }
 
@@ -1918,37 +2393,65 @@ function hideRelationshipCard() {
   if (panel) panel.classList.remove('show');
 }
 
-function sendGift(giftId) {
+async function sendGift(giftId) {
   const gift = DATA.gifts.find(g => g.id === giftId);
   if (!gift) return;
 
   hideGiftPanel();
 
-  // 记录礼物
-  state.giftReceived.push(giftId);
-  // 倒霉礼物好感度加得少，但不是0——Bobby 知道有人在
-  const intimacyGain = gift.type === 'bad' ? 2 : (gift.type === 'random' ? 3 : 5);
-  addIntimacy(intimacyGain);
-  saveMemory();
-
-  // 显示送礼动画
+  // 显示送礼动画（乐观 UI）
   dom.giftSuccessEmoji.textContent = gift.emoji;
   dom.giftSuccess.classList.add('show');
   setTimeout(() => dom.giftSuccess.classList.remove('show'), 1500);
 
-  // 神秘包裹：随机效果
-  let effectStatus;
-  let deepReactions;
+  // 调用后端送礼 API（服务端权威）
+  try {
+    const res = await apiFetch(`/gifts/${giftId}`, { method: 'POST' });
+    if (res.ok) {
+      const data = await res.json();
 
+      // 同步后端返回的好感度
+      if (data.intimacyLevel && data.intimacyLevel.value !== undefined) {
+        state.intimacy = data.intimacyLevel.value;
+      }
+      state.giftReceived.push(giftId);
+      saveMemory();
+
+      // 使用服务端返回的状态效果
+      const effectStatus = data.statusEffect;
+      applyGiftEffect(giftId, gift, effectStatus);
+      return;
+    }
+  } catch (e) {
+    console.error('送礼 API 失败:', e);
+  }
+
+  // 降级：后端不可用时使用本地逻辑
+  state.giftReceived.push(giftId);
+  const intimacyGain = gift.type === 'bad' ? 2 : (gift.type === 'random' ? 3 : 5);
+  addIntimacy(intimacyGain);
+  saveMemory();
+
+  let effectStatus;
   if (giftId === 'luckbox') {
     const luckResult = DATA.luckboxEffects[Math.floor(Math.random() * DATA.luckboxEffects.length)];
     effectStatus = luckResult.status;
-    deepReactions = [luckResult.msg];
-  } else if (gift.type === 'bad') {
-    effectStatus = DATA.giftEffects[giftId];
-    deepReactions = DATA.badLuckReactions[giftId] || ['......'];
   } else {
     effectStatus = DATA.giftEffects[giftId];
+  }
+  applyGiftEffect(giftId, gift, effectStatus);
+}
+
+// 统一的礼物效果应用（服务端成功后或本地降级共用）
+function applyGiftEffect(giftId, gift, effectStatus) {
+  let deepReactions;
+
+  if (giftId === 'luckbox') {
+    const luckResult = DATA.luckboxEffects.find(e => e.status === effectStatus) || DATA.luckboxEffects[0];
+    deepReactions = [luckResult.msg];
+  } else if (gift.type === 'bad') {
+    deepReactions = DATA.badLuckReactions[giftId] || ['......'];
+  } else {
     const goodReactions = {
       coffee: ['有点清醒了', '嗯...咖啡的味道还在'],
       medicine: ['好多了', '...不知道该说什么'],
@@ -1960,13 +2463,18 @@ function sendGift(giftId) {
     deepReactions = goodReactions[giftId] || ['嗯...'];
   }
 
-  // 延迟状态更新
-  const delay = isNight() ? 30000 : 60000;
+  // 延迟状态更新（5-10秒，让用户注意到变化）
+  const delay = isNight() ? 5000 : 8000;
   setTimeout(() => {
     if (effectStatus) {
       dom.moodText.textContent = effectStatus;
       dom.chatStatus.textContent = effectStatus;
       state.statusText = effectStatus;
+      // 同步到状态机，防止下次 updateStatus 覆盖
+      const sm = getStatusMachine();
+      sm.current = effectStatus;
+      sm.lastChange = Date.now();
+      saveStatusMachine(sm);
     }
   }, delay);
 
@@ -1983,7 +2491,7 @@ function sendGift(giftId) {
     }, deepDelay);
   }
 
-  // 倒霉礼物还会在动态里吐槽（50%概率）
+  // 倒霉礼物还会在动态里吐槽（50%概率，仅本地降级时，后端已处理则跳过）
   if (gift.type === 'bad' && Math.random() < 0.5) {
     const noteDelay = isNight() ? 180000 : 600000;
     setTimeout(() => {
@@ -2035,74 +2543,18 @@ function showToast(text) {
 }
 
 // ===== 每日新碎片 =====
-// 每次访问生成一条新的碎片，让用户有"回来的理由"
-// 如果离开多天，会生成多条
-function checkDailyNote() {
+// 从后端加载最新动态（后端定时任务自动生成碎片）
+async function checkDailyNote() {
   const today = new Date().toDateString();
-  const lastVisit = localStorage.getItem('bobby_last_visit');
   const lastNoteDate = localStorage.getItem('bobby_last_note');
-
-  // 计算离开天数
-  const daysGone = lastVisit ? Math.floor((Date.now() - new Date(lastVisit).getTime()) / 86400000) : 0;
 
   if (lastNoteDate === today) {
     localStorage.setItem('bobby_last_visit', new Date().toISOString());
     return;
   }
 
-  const dailyNotes = [
-    '窗外的树好像又长高了一点。',
-    '楼下的流浪猫今天没来。',
-    '耳机线又打结了。',
-    '发现常去的那家店关门了。',
-    '今天阳光很好，但风也很大。',
-    '手机屏碎了好久了，一直没修。',
-    '阳台上的衣服忘了收。',
-    '泡面吃完了最后一包。',
-    '看了一个很老的电影。还行。',
-    '路过一家花店，犹豫了一下没进去。',
-    '今天的月亮特别圆。',
-    '室友带了宵夜回来，很香。',
-    '发现一首很好听的歌，单曲循环了。',
-    '下雨了没带伞，在便利店等了半小时。',
-    '手机相册弹出了去年的今天。',
-    '突然想学吉他。但大概不会真的去。',
-    '便利店阿姨问我怎么天天来。',
-    '公交车上遇到一只很乖的狗。',
-    '今天的晚霞很好看。拍了一张。',
-    '睡不着，数了一下天花板上的裂纹。',
-    '楼下的路灯换了一个新的，比以前亮了好多。有点不习惯。',
-    '发现枕头下面压着一张很久以前的电影票。已经看不清字了。',
-    '窗外有一只鸟一直在叫，叫了很久。',
-    '泡了一杯茶，忘了喝，凉了。',
-    '路过公园，有人在吹萨克斯。走调了，但有种认真的感觉。',
-    '手机电量到1%的时候充上了。松了口气。',
-    '半夜听到救护车的声音。希望没事。',
-    '发现袜子破了一个洞。但只破了一只。',
-    '楼下的煎饼摊今天没出。有点失望。',
-    '风把门吹关了，吓了一跳。'
-  ];
-
-  // 生成新碎片（最多3条，防止刷屏）
-  const count = Math.min(daysGone || 1, 3);
-  for (let i = 0; i < count; i++) {
-    const note = dailyNotes[Math.floor(Math.random() * dailyNotes.length)];
-    // 避免重复
-    if (DATA.notes[0] && DATA.notes[0].text === note) continue;
-
-    const h = Math.floor(Math.random() * 4) + 22; // 22-01点之间
-    const m = Math.floor(Math.random() * 60);
-
-    DATA.notes.unshift({
-      id: Date.now() + i,
-      text: note,
-      time: i === 0 ? '刚刚' : (i === 1 ? '昨天' : '前天'),
-      timeDetail: h.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0'),
-      likes: Math.floor(Math.random() * 3),
-      liked: false,
-      comments: []
-    });
-  }
+  // 从后端获取最新动态
+  await fetchNotes();
 
   localStorage.setItem('bobby_last_note', today);
   localStorage.setItem('bobby_last_visit', new Date().toISOString());
@@ -2110,6 +2562,76 @@ function checkDailyNote() {
   // 刷新显示
   if (state.currentPage === 'notesPage') loadNotes();
   if (state.currentPage === 'profilePage') loadProfileNotes();
+}
+
+// ===== Socket.io 实时连接 =====
+let socket = null;
+
+function initSocket() {
+  try {
+    socket = io({ transports: ['websocket', 'polling'] });
+
+    socket.on('connect', () => {
+      // 认证
+      if (state.authToken) {
+        socket.emit('auth', state.authToken);
+      }
+    });
+
+    // 重新连接时重新认证
+    socket.on('reconnect', () => {
+      if (state.authToken) {
+        socket.emit('auth', state.authToken);
+      }
+    });
+
+    // Bobby 状态更新
+    socket.on('status_update', (data) => {
+      if (data.status) {
+        state.statusText = data.status;
+        dom.moodText.textContent = data.status;
+        dom.chatStatus.textContent = data.status;
+        const sm = getStatusMachine();
+        sm.current = data.status;
+        sm.lastChange = data.changedAt ? new Date(data.changedAt).getTime() : Date.now();
+        saveStatusMachine(sm);
+      }
+    });
+
+    // 新碎片通知
+    socket.on('new_note', (data) => {
+      // 重新加载动态
+      fetchNotes();
+    });
+
+    // Bobby 低语（服务端推送）
+    socket.on('bobby_whisper', (data) => {
+      if (state.currentPage !== 'chatPage') return;
+      if (!data.content) return;
+
+      if (data.type === 'thought') {
+        addThought(data.content);
+      } else {
+        addMessage(data.content, false);
+      }
+    });
+
+    // Bobby 评论回复通知
+    socket.on('bobby_comment_reply', (data) => {
+      if (data.reply) {
+        addUnreadBobbyReply();
+        if (state.currentPage === 'notesPage') {
+          fetchNotes();
+        }
+      }
+    });
+
+    socket.on('disconnect', () => {
+      console.log('Socket 断开');
+    });
+  } catch (e) {
+    console.error('Socket.io 连接失败:', e);
+  }
 }
 
 // ===== 定时更新 =====
@@ -2120,19 +2642,31 @@ function startScheduler() {
 }
 
 // ===== 初始化 =====
-function init() {
+async function init() {
   setupEvents();
   loadGifts();
-  loadComments();  // 先加载评论数据
   // 恢复未读 Bobby 回复计数
   const savedReplies = localStorage.getItem('bobby_unread_replies');
   if (savedReplies) {
     state.unreadBobbyReplies = parseInt(savedReplies) || 0;
     updateNotesBadge();
   }
+  setupNotesPullRefresh();
+
+  // 初始化后端认证（游客自动登录）
+  await initAuth();
+
+  // 建立 Socket.io 实时连接
+  initSocket();
+
+  // 初始化聊天滚动监听
+  initChatScrollWatcher();
+
+  // 从后端加载最新动态（完成后才加载评论和渲染）
+  await fetchNotes();
+  loadComments();  // 必须在 fetchNotes 之后，DATA.notes 有数据才能加载评论
   loadNotes();
   loadProfileNotes();
-  setupNotesPullRefresh();
 
   const visited = localStorage.getItem('bobby_visited');
   if (visited) {
