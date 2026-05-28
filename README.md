@@ -59,14 +59,14 @@ Bobby 是一个**有自己生活节奏的数字存在**。
 <div align="center">
 <table>
 <tr>
-<td align="center"><img src="screenshots/01-onboarding.png" width="200"><br><sub>引导页 — "白天，它有自己的生活"</sub></td>
-<td align="center"><img src="screenshots/04-chat-reply.png" width="200"><br><sub>聊天 — "哦，你来了"</sub></td>
-<td align="center"><img src="screenshots/06-profile.png" width="200"><br><sub>主页 — "你们还不太熟"</sub></td>
+<td align="center"><img src="screenshots/01-onboarding.png" width="280"><br><sub>引导页 — "白天，它有自己的生活"</sub></td>
+<td align="center"><img src="screenshots/04-chat-reply.png" width="280"><br><sub>聊天 — "哦，你来了"</sub></td>
+<td align="center"><img src="screenshots/06-profile.png" width="280"><br><sub>主页 — "你们还不太熟"</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="screenshots/08-notes.png" width="200"><br><sub>碎片 — Bobby 不会一直回你，但偶尔会</sub></td>
-<td align="center"><img src="screenshots/09-gift-panel.png" width="200"><br><sub>送点什么 — 它不会说谢谢</sub></td>
-<td align="center"><img src="screenshots/11-relationship-card.png" width="200"><br><sub>关系 — 从陌生到信赖</sub></td>
+<td align="center"><img src="screenshots/08-notes.png" width="280"><br><sub>碎片 — Bobby 不会一直回你，但偶尔会</sub></td>
+<td align="center"><img src="screenshots/09-gift-panel.png" width="280"><br><sub>送点什么 — 它不会说谢谢</sub></td>
+<td align="center"><img src="screenshots/11-relationship-card.png" width="280"><br><sub>关系 — 从陌生到信赖</sub></td>
 </tr>
 </table>
 </div>
@@ -248,7 +248,7 @@ node app.js
 | `memoryService.js` | 记忆系统 — 向量检索、用户画像、Dream-time 衰减 |
 | `aiService.js` | AI 提示词 — Bobby 人设、对话风格、碎碎念生成 |
 
-这些模块是 Bobby 的"灵魂"。保留它们是因为我不确定这个方向最终会走向哪里。
+这些模块是 Bobby 的"灵魂"。还在持续打磨中，暂时未包含在公开仓库里。
 
 如果你对这个项目感兴趣，或者想一起探索"低压AI陪伴"的可能性，欢迎联系我：**huangweijiebobby@gmail.com**
 
