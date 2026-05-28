@@ -33,3 +33,7 @@ yarn-error.log*
 *.tmp
 *.bak
 *.backup
+
+# Screenshots & test artifacts
+screenshots/
+test-output/
