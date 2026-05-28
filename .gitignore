@@ -35,7 +35,7 @@ yarn-error.log*
 *.backup
 
 # Screenshots & test artifacts
-screenshots/
+screenshots/*/
 test-output/
 
 # Core IP (not open source)
