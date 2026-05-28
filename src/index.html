@@ -162,8 +162,8 @@
         <!-- VIP 入口 -->
         <div class="vip-card" onclick="showVipPanel()">
           <div class="vip-card-content">
-            <div class="vip-card-title">成为深夜知己</div>
-            <div class="vip-card-desc">解锁更深的记忆、更多碎片、专属互动</div>
+            <div class="vip-card-title">深夜知己</div>
+            <div class="vip-card-desc">敬请期待</div>
           </div>
           <span class="gift-entry-arrow">›</span>
         </div>
@@ -275,34 +275,15 @@
       <div class="vip-sheet" onclick="event.stopPropagation()">
         <div class="gift-handle"></div>
         <h3 class="gift-title">深夜知己</h3>
-        <p class="gift-subtitle">让 Bobby 记住更多关于你的事</p>
+        <p class="gift-subtitle">正在认真思考中…</p>
 
-        <div class="vip-tier">
-          <div class="vip-tier-header">
-            <span class="vip-tier-name">🌙 月光</span>
-            <span class="vip-tier-price">¥18/月</span>
-          </div>
-          <div class="vip-tier-features">
-            <div class="vip-feature">记忆深度 ×3</div>
-            <div class="vip-feature">每日碎片 ×2</div>
-            <div class="vip-feature">关系进度加速</div>
-          </div>
-          <button class="vip-btn" onclick="showToast('开放后第一时间通知你')">加入等待名单</button>
-        </div>
-
-        <div class="vip-tier featured">
-          <div class="vip-tier-badge">最受欢迎</div>
-          <div class="vip-tier-header">
-            <span class="vip-tier-name">⭐ 星海</span>
-            <span class="vip-tier-price">¥48/月</span>
-          </div>
-          <div class="vip-tier-features">
-            <div class="vip-feature">月光全部权益</div>
-            <div class="vip-feature">Bobby 主动消息频率 ×2</div>
-            <div class="vip-feature">专属动态内容</div>
-            <div class="vip-feature">照片/语音消息更多</div>
-          </div>
-          <button class="vip-btn primary" onclick="showToast('开放后第一时间通知你')">加入等待名单</button>
+        <div style="text-align: center; padding: 40px 20px;">
+          <div style="font-size: 48px; margin-bottom: 16px;">🌙</div>
+          <p style="color: var(--text-secondary); font-size: 14px; line-height: 2; margin-bottom: 24px;">
+            Bobby 还在想<br>怎么才能更好地记住你<br><br>
+            <span style="color: var(--text-muted); font-size: 12px;">敬请期待</span>
+          </p>
+          <button class="vip-btn" onclick="showToast('开放后第一时间通知你')" style="margin-top: 12px;">开放时通知我</button>
         </div>
 
         <p class="vip-note">所有互动都是匿名的。Bobby 不知道你是不是 VIP。</p>
