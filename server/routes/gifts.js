@@ -2,6 +2,7 @@ const express = require('express');
 const User = require('../models/User');
 const Note = require('../models/Note');
 const { authMiddleware } = require('../middleware/auth');
+const { getTimeLabel } = require('../utils/time');
 const router = express.Router();
 
 // 礼物定义（服务端权威版本）
@@ -72,13 +73,23 @@ router.post('/:giftId', authMiddleware, async (req, res) => {
       statusEffect = result.status;
     }
 
-    // 更新 Bobby 状态
+    // 更新 Bobby 状态（礼物效果通过临时覆盖字段显示，不破坏状态机）
     const bobbyEngine = req.app.get('bobbyEngine');
     if (bobbyEngine && bobbyEngine.state) {
-      bobbyEngine.state.currentStatus = statusEffect;
-      bobbyEngine.state.statusChangedAt = new Date();
+      // 设置临时覆盖状态，前端用它显示，但不修改 currentStatus
+      bobbyEngine.state.displayOverride = statusEffect;
+      bobbyEngine.state.overrideExpiry = new Date(Date.now() + 3 * 60 * 1000); // 3 分钟后过期
       await bobbyEngine.state.save();
       bobbyEngine.broadcastStatus();
+      // 3 分钟后清除覆盖
+      setTimeout(async () => {
+        if (bobbyEngine.state.displayOverride === statusEffect) {
+          bobbyEngine.state.displayOverride = null;
+          bobbyEngine.state.overrideExpiry = null;
+          await bobbyEngine.state.save();
+          bobbyEngine.broadcastStatus();
+        }
+      }, 3 * 60 * 1000);
     }
 
     // 礼物影响 Bobby 情绪
@@ -115,14 +126,5 @@ router.post('/:giftId', authMiddleware, async (req, res) => {
     res.status(500).json({ error: '送礼失败' });
   }
 });
-
-function getTimeLabel() {
-  const h = new Date().getHours();
-  if (h >= 23 || h < 1) return '深夜';
-  if (h >= 1 && h < 6) return '凌晨';
-  if (h >= 6 && h < 12) return '上午';
-  if (h >= 12 && h < 18) return '下午';
-  return '晚上';
-}
 
 module.exports = router;

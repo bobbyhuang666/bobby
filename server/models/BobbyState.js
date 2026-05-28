@@ -8,6 +8,10 @@ const bobbyStateSchema = new mongoose.Schema({
   currentStatus: { type: String, default: '还没睡呢' },
   statusChangedAt: { type: Date, default: Date.now },
 
+  // 临时覆盖状态（礼物效果等，不破坏状态机）
+  displayOverride: { type: String, default: null },
+  overrideExpiry: { type: Date, default: null },
+
   // 今天发了几条低语
   whisperCount: { type: Number, default: 0 },
   whisperDate: { type: String, default: '' },

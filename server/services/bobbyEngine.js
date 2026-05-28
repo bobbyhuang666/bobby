@@ -6,6 +6,7 @@ const aiService = require('./aiService');
 const { EmotionEngine } = require('./emotionEngine');
 const { MemoryService } = require('./memoryService');
 const { CognitiveLoop } = require('./cognitiveLoop');
+const { getTimeLabel, getTimePeriod } = require('../utils/time');
 
 // 状态机定义
 const STATE_MACHINE = {
@@ -15,6 +16,10 @@ const STATE_MACHINE = {
   '在看窗外':    { next: ['在发呆', '还没睡呢', '在听歌'], hours: [23,0,1,2] },
   '困了但睡不着': { next: ['在发呆', '快睡了', '在听歌'], hours: [0,1,2] },
   '快睡了':      { next: ['困了但睡不着', '睡了'], hours: [1,2,3] },
+  '睡了':        { next: ['还没睡呢'], hours: [3,4,5] },
+  '刚醒':        { next: ['在发呆', '在洗漱'], hours: [6,7] },
+  '在洗漱':      { next: ['在发呆', '刚出门'], hours: [6,7] },
+  '刚出门':      { next: ['在上课', '在图书馆'], hours: [7,8] },
   '在上课':      { next: ['下课了', '在走神'], hours: [8,9,10,11,13,14,15] },
   '在走神':      { next: ['在上课', '下课了'], hours: [8,9,10,11,13,14,15] },
   '下课了':      { next: ['在图书馆', '在打工', '在食堂'], hours: [11,12,15,16,17] },
@@ -48,6 +53,7 @@ const STATE_MACHINE = {
 
 const INITIAL_STATES = {
   lateNight: '还没睡呢',
+  earlyMorning: '快睡了',
   morning: '在上课',
   afternoon: '在图书馆',
   evening: '刚下班',
@@ -120,15 +126,9 @@ class BobbyEngine {
     await this.state.save();
   }
 
-  // 获取当前时段
+  // 获取当前时段（委托共享工具）
   getTimePeriod() {
-    const h = new Date().getHours();
-    if (h >= 23 || h < 3) return 'lateNight';
-    if (h >= 3 && h < 6) return 'earlyMorning';
-    if (h >= 6 && h < 12) return 'morning';
-    if (h >= 12 && h < 17) return 'afternoon';
-    if (h >= 17 && h < 21) return 'evening';
-    return 'night';
+    return getTimePeriod();
   }
 
   // 推进状态机
@@ -138,7 +138,25 @@ class BobbyEngine {
     const now = new Date();
     const hour = now.getHours();
     const elapsed = now - this.state.statusChangedAt;
-    const minDuration = 5 * 60 * 1000; // 5分钟最短持续
+
+    // 根据当前状态和时段动态调整切换节奏（更像真人）
+    const currentStatus = this.state.currentStatus;
+    let minDuration, maxExtra;
+
+    // 活跃状态切换快，安静状态切换慢
+    if (['在上课', '在打工', '在食堂', '在回家路上', '在便利店'].includes(currentStatus)) {
+      minDuration = 3 * 60 * 1000;   // 活跃：3 分钟最短
+      maxExtra = 8 * 60 * 1000;      // 最多 +8 分钟
+    } else if (['在发呆', '在图书馆', '在看窗外', '在听歌', '在休息'].includes(currentStatus)) {
+      minDuration = 8 * 60 * 1000;   // 安静：8 分钟最短
+      maxExtra = 15 * 60 * 1000;     // 最多 +15 分钟
+    } else if (hour >= 23 || hour < 3) {
+      minDuration = 6 * 60 * 1000;   // 深夜：中等节奏
+      maxExtra = 12 * 60 * 1000;
+    } else {
+      minDuration = 5 * 60 * 1000;   // 默认
+      maxExtra = 10 * 60 * 1000;
+    }
 
     const rule = STATE_MACHINE[this.state.currentStatus];
 
@@ -155,8 +173,8 @@ class BobbyEngine {
       return;
     }
 
-    // 正常推进（最少5分钟）
-    if (elapsed > minDuration + Math.random() * 10 * 60 * 1000) {
+    // 正常推进（动态节奏）
+    if (elapsed > minDuration + Math.random() * maxExtra) {
       const valid = rule.next.filter(s => {
         const r = STATE_MACHINE[s];
         return r ? r.hours.includes(hour) : true;
@@ -173,8 +191,12 @@ class BobbyEngine {
   // 广播状态变化给所有在线用户
   broadcastStatus() {
     if (this.io) {
+      // 如果有临时覆盖（礼物效果），优先显示覆盖状态
+      const now = new Date();
+      const isOverrideValid = this.state.displayOverride &&
+        this.state.overrideExpiry && now < new Date(this.state.overrideExpiry);
       this.io.emit('status_update', {
-        status: this.state.currentStatus,
+        status: isOverrideValid ? this.state.displayOverride : this.state.currentStatus,
         changedAt: this.state.statusChangedAt
       });
     }
@@ -325,15 +347,7 @@ class BobbyEngine {
   }
 
   getTimeLabel() {
-    const h = new Date().getHours();
-    if (h >= 23 || h < 1) return '深夜';
-    if (h >= 1 && h < 3) return '凌晨';
-    if (h >= 3 && h < 6) return '天快亮了';
-    if (h >= 6 && h < 11) return '上午';
-    if (h >= 11 && h < 14) return '中午';
-    if (h >= 14 && h < 18) return '下午';
-    if (h >= 18 && h < 21) return '傍晚';
-    return '晚上';
+    return getTimeLabel();
   }
 
   isNight() {
