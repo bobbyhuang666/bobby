@@ -5,6 +5,15 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 
+// ===== 启动环境变量检查 =====
+const REQUIRED_ENV = ['MONGODB_URI', 'JWT_SECRET', 'DEEPSEEK_API_KEY'];
+const missing = REQUIRED_ENV.filter(key => !process.env[key]);
+if (missing.length > 0) {
+  console.error(`缺少必需的环境变量: ${missing.join(', ')}`);
+  console.error('请在 .env 文件中配置这些变量，参考 .env.example');
+  process.exit(1);
+}
+
 const connectDB = require('./config/db');
 const authRoutes = require('./routes/auth');
 const chatRoutes = require('./routes/chat');

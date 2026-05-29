@@ -429,11 +429,13 @@ class BobbyEngine {
       // （Andy 30 维情绪 → Bobby 情绪引擎的情绪输入）
       if (result && result.bobbyEmotion && this.emotion) {
         const emotionData = this.bridge.getBobbyEmotionData();
-        // 将 Andy 情绪的 valence 作为情绪引擎的额外输入
         // 不完全替换 Bobby 自己的情绪，而是作为"环境情绪"影响
         if (emotionData.valence !== undefined) {
           this.emotion._andyValence = emotionData.valence;
+          this.emotion._andyArousal = emotionData.arousal;
           this.emotion._andyStress = emotionData.stress;
+          // 注入 top 5 主导情绪维度，供 prompt 注入参考
+          this.emotion._andyDominant = emotionData.dominant || [];
         }
       }
 

@@ -299,6 +299,8 @@ const DATA = {
   ],
 
   // 状态机 - 每个状态只能跳转到相邻状态
+  // ⚠️ 与 server/services/bobbyEngine.js STATE_MACHINE 保持同步
+  // 前端保留本地副本用于 UI 显示和状态预测
   stateMachine: {
     // 深夜 (23:00-03:00)
     '还没睡呢':    { next: ['在发呆', '在听歌', '在看窗外'], hours: [23,0,1,2] },
@@ -655,6 +657,9 @@ function addIntimacy(points) {
   saveMemory();
 }
 
+// 好感度等级（与后端 User.js getIntimacyLevel 保持一致）
+// 前端保留本地计算，用于页面加载/离线时的即时显示
+// 阈值如需修改，必须同步更新 server/models/User.js
 function getIntimacyLevel() {
   const i = state.intimacy;
   if (i < 10) return { name: '陌生', desc: '你们还不太熟', emoji: '·' };

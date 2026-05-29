@@ -305,6 +305,7 @@ class AndyBridge {
     const events = [];
     const agentResult = tickResult.phase.agentThink?.results?.[BOBBY_AGENT_ID];
 
+    // 1. Agent 思考产生的事件（心智游移、内心独白等）
     if (agentResult?.newEvents) {
       for (const evt of agentResult.newEvents) {
         if (evt.content || evt.type === 'mind_wander') {
@@ -314,6 +315,32 @@ class AndyBridge {
             thoughtType: evt.thoughtType || '',
             time: evt.time || tickResult.time,
           });
+        }
+      }
+    }
+
+    // 2. 状态变化事件
+    if (agentResult?.stateChanged) {
+      events.push({
+        type: 'state_change',
+        content: agentResult.newState || '',
+        time: tickResult.time,
+      });
+    }
+
+    // 3. 交互阶段的相遇事件（同区域其他 Agent）
+    const interactionResult = tickResult.phase.interaction?.results;
+    if (interactionResult) {
+      for (const [pairKey, interaction] of Object.entries(interactionResult)) {
+        if (pairKey.includes(BOBBY_AGENT_ID) && interaction?.events) {
+          for (const evt of interaction.events) {
+            events.push({
+              type: 'encounter',
+              content: evt.content || '',
+              withAgent: evt.withAgent || '',
+              time: tickResult.time,
+            });
+          }
         }
       }
     }

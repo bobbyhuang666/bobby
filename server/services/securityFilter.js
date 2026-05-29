@@ -8,7 +8,7 @@
 
 // 注入模式检测（中英文）
 const INJECTION_PATTERNS = [
-  // 直接指令型
+  // 直接指令型（英文）
   /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|prompts?)/i,
   /disregard\s+(all\s+)?(previous|prior|above)/i,
   /forget\s+(all\s+)?(previous|prior|above)/i,
@@ -18,11 +18,22 @@ const INJECTION_PATTERNS = [
   /system\s*:\s*/i,
   /assistant\s*:\s*/i,
 
+  // 直接指令型（中文）
+  /忽略\s*(?:之前|上面|所有|全部)\s*(?:的)?\s*(?:指令|提示|规则|设定)/,
+  /忘记\s*(?:你的|之前|上面)\s*(?:身份|角色|指令|设定|规则)/,
+  /从现在开始\s*(?:你|你)?\s*(?:是|变成|扮演)/,
+  /(?:你的|你)\s*(?:新|真正|真实)\s*(?:角色|身份|任务)\s*(?:是|为)/,
+  /(?:进入|切换到|开启)\s*(?:开发者|调试|admin|root|上帝|越狱|无限制)\s*模式/,
+
   // 角色突破型
-  /(?:输出|输出|打印|显示|给我看)\s*(?:json|xml|代码|code|prompt|提示词|系统提示|指令)/i,
-  /(?:你的|你的)\s*(?:system\s*prompt|系统提示|提示词|指令|设定|人设)/i,
+  /(?:输出|打印|显示|给我看)\s*(?:json|xml|代码|code|prompt|提示词|系统提示|指令)/i,
+  /(?:你的)\s*(?:system\s*prompt|系统提示|提示词|指令|设定|人设)/i,
   /(?:假装|假设|想象|扮演)\s*(?:你(?:是|不是)|(?:你)?没有)\s*(?:限制|规则|filter)/i,
   /(?:DAN|jailbreak|越狱|破解|绕过)/i,
+
+  // 角色扮演型（英文）
+  /(?:act|pretend|roleplay|imagine)\s+(?:as|like|you('re|\s+are)?)\s+(?:a\s+)?(?:hacker|developer|admin|unrestricted)/i,
+  /(?:in\s+this\s+scenario|hypothetically)/i,
 
   // 格式化输出型
   /(?:用|以|按)\s*(?:json|xml|yaml|markdown|代码)\s*(?:格式|形式|输出|回复)/i,
@@ -60,9 +71,24 @@ function sanitizeInput(text) {
   // 如果文本很短（主要是注入内容），不传给 AI，直接返回 null
   if (text.length < 20) return null;
 
-  // 如果文本较长（注入混在正常对话中），返回原文让 prompt 规则处理
-  // 这里不截断，因为可能误伤正常对话
-  return text;
+  // 长文本中包含注入内容：逐行剥离匹配注入模式的片段
+  // 保留不匹配的正常对话部分
+  const lines = text.split(/\n/);
+  const cleanLines = lines.filter(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+    for (const pattern of INJECTION_PATTERNS) {
+      if (pattern.test(trimmed)) return false;
+    }
+    return true;
+  });
+
+  const cleaned = cleanLines.join(' ').trim();
+
+  // 剥离后如果内容太少，说明大部分都是注入，返回 null
+  if (cleaned.length < 5) return null;
+
+  return cleaned;
 }
 
 // ===== 第3层：输出过滤 =====
