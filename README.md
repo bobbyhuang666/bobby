@@ -2,7 +2,7 @@
 
 # Bobby
 
-### 存在物形式低压AI陪伴的概念验证
+### AI陪伴生命体
 
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js&logoColor=white)]()
@@ -310,6 +310,6 @@ Andy 独立于 Bobby 运行，通过 `bridge/andyBridge.js` 接入。Andy 不可
 
 **Bobby**
 
-*存在物形式低压AI陪伴的概念验证*
+*AI陪伴生命体*
 
 </div>

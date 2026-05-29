@@ -1,7 +1,7 @@
 {
   "name": "bobby-server",
   "version": "2.0.0",
-  "description": "Bobby - 存在物形式低压AI陪伴 后端服务（Andy 世界引擎）",
+  "description": "Bobby - AI陪伴生命体 后端服务（Andy 世界引擎）",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
