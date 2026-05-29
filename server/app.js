@@ -1,4 +1,4 @@
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -13,17 +13,29 @@ const giftRoutes = require('./routes/gifts');
 const userRoutes = require('./routes/user');
 const BobbyEngine = require('./services/bobbyEngine');
 const startJobs = require('./jobs');
+const { BobbyMemoryService } = require('./services/bobbyMemory');
+const { WorldEngine } = require('./services/worldEngine');
+const { AndyBridge } = require('./bridge/andyBridge');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] }
+  cors: {
+    origin: process.env.NODE_ENV === 'production'
+      ? process.env.ALLOWED_ORIGIN || 'https://yourdomain.com'
+      : ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000'],
+    methods: ['GET', 'POST']
+  }
 });
 
 // ===== 中间件 =====
-app.use(cors());
-app.use(express.json());
-app.use(express.static('../src')); // 前端静态文件
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production'
+    ? process.env.ALLOWED_ORIGIN || 'https://yourdomain.com'
+    : ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000']
+}));
+app.use(express.json({ limit: '10kb' }));
+app.use(express.static(require('path').join(__dirname, '..', 'src'))); // 前端静态文件
 
 // 限流
 const limiter = rateLimit({
@@ -80,8 +92,46 @@ async function start() {
   await bobbyEngine.init();
   app.set('bobbyEngine', bobbyEngine);
 
+  // Bobby 自我记忆库（用于丰富回复内容）
+  await BobbyMemoryService.init();
+  console.log('Bobby 记忆库已初始化');
+
+  // Andy 引擎（心理学驱动的多智能体世界模拟）
+  let andyBridge = null;
+  try {
+    andyBridge = new AndyBridge();
+    bobbyEngine.setAndyBridge(andyBridge);
+    // Andy 初始化在 setAndyBridge 后由 BobbyEngine.init() 内部完成
+    // 但因为 init() 已经跑完了，这里需要手动初始化
+    const BobbyState = require('./models/BobbyState');
+    const bobbyState = await BobbyState.findOne({ _singleton: 'bobby' });
+    await andyBridge.init({
+      bobbyState,
+      savedState: bobbyState?.andyWorldState || null,
+    });
+    // 用 Andy 的状态同步 Bobby
+    const andyStatus = andyBridge.getBobbyStatus();
+    if (andyStatus && bobbyState && andyStatus !== bobbyState.currentStatus) {
+      bobbyState.currentStatus = andyStatus;
+      bobbyState.statusChangedAt = new Date();
+      await bobbyState.save();
+    }
+    console.log('Andy 世界引擎已初始化');
+  } catch (err) {
+    console.error('Andy 初始化失败，使用 Bobby 自有状态机:', err.message);
+    andyBridge = null;
+  }
+
+  // 世界引擎（Andy 未启用时的降级方案）
+  if (!andyBridge) {
+    await WorldEngine.init();
+    console.log('世界引擎已初始化（降级模式）');
+  } else {
+    console.log('世界引擎由 Andy 接管，旧 worldEngine 跳过');
+  }
+
   // 定时任务（依赖 bobbyEngine 初始化完成）
-  startJobs(bobbyEngine, io);
+  startJobs(bobbyEngine, io, andyBridge);
 
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, () => {

@@ -7,6 +7,7 @@ const aiService = require('../services/aiService');
 const { MemoryService } = require('../services/memoryService');
 const { getTimeLabel } = require('../utils/time');
 const { getWeatherContext, generateWeatherNote } = require('../services/weatherService');
+const { WorldEngine } = require('../services/worldEngine');
 
 // Bobby 的碎片素材（厦门日常，不刻意强调城市名）
 const DAILY_NOTES = [
@@ -53,9 +54,25 @@ const WHISPERS_DAY = ['嗯', '困', '海风好大'];
 const MUTTERS_NIGHT = ['下雨了', '海风好大', '路灯灭了', '月亮挺亮的', '隔壁灯也灭了', '猫又来了', '好困...', '浪声好响'];
 const MUTTERS_DAY = ['树叶在晃', '有点饿了', '困', '好热'];
 
-function startJobs(bobbyEngine, io) {
+function startJobs(bobbyEngine, io, andyBridge) {
+  const hasAndy = !!andyBridge;
 
-  // ===== 每 5 分钟推进状态机 =====
+  // ===== Andy Tick：每 5 分钟推进 Andy 世界 =====
+  if (hasAndy) {
+    cron.schedule('*/5 * * * *', async () => {
+      try {
+        const result = await bobbyEngine.tickAndy();
+        if (result && result.stateChanged) {
+          console.log(`Andy tick: ${result.bobbyStatus} (tick #${result.time?.tick || '?'})`);
+        }
+      } catch (err) {
+        console.error('Andy tick 失败:', err.message);
+      }
+    });
+    console.log('Andy tick 定时任务已启动（每 5 分钟）');
+  }
+
+  // ===== 每 5 分钟推进状态机（Andy 未启用时使用 Bobby 自有状态机）=====
   cron.schedule('*/5 * * * *', async () => {
     try {
       await bobbyEngine.updateStatus();
@@ -390,7 +407,59 @@ function startJobs(bobbyEngine, io) {
     }
   });
 
-  console.log('定时任务已启动（含认知循环 + 记忆衰减 + 游客清理）');
+  // ===== 每天凌晨 0:05：生成每日世界事件（Andy 未启用时）=====
+  if (!hasAndy) {
+    cron.schedule('5 0 * * *', async () => {
+      try {
+        await WorldEngine.generateDailyEvents();
+        console.log('每日世界事件已生成');
+      } catch (err) {
+        console.error('世界事件生成失败:', err.message);
+      }
+    });
+
+    // ===== 每天凌晨 5:30：清理旧世界事件（保留7天）=====
+    cron.schedule('30 5 * * *', async () => {
+      try {
+        await WorldEngine.cleanup();
+        console.log('旧世界事件已清理');
+      } catch (err) {
+        console.error('世界事件清理失败:', err.message);
+      }
+    });
+
+    // ===== 每 2 小时：用 LLM 生成动态事件（15%概率）=====
+    cron.schedule('0 */2 * * *', async () => {
+      try {
+        if (Math.random() > 0.15) return;
+
+        const bobbyState = await BobbyState.findOne({ _singleton: 'bobby' });
+        if (!bobbyState) return;
+
+        let weatherCtx = '';
+        try {
+          weatherCtx = await getWeatherContext();
+        } catch (e) {}
+
+        const recentEvents = await WorldEngine.getUnusedEvents(3);
+        await WorldEngine.generateDynamicEvent(bobbyState.currentStatus, weatherCtx, recentEvents);
+      } catch (err) {
+        console.error('动态事件生成失败:', err.message);
+      }
+    });
+  } else {
+    // ===== Andy 模式：每小时持久化 Andy 世界状态 =====
+    cron.schedule('0 * * * *', async () => {
+      try {
+        await bobbyEngine.persistAndyState();
+      } catch (err) {
+        console.error('Andy 状态持久化失败:', err.message);
+      }
+    });
+    console.log('Andy 模式：旧 worldEngine 任务已跳过，启用 Andy 状态持久化');
+  }
+
+  console.log(`定时任务已启动（${hasAndy ? 'Andy 世界引擎' : 'worldEngine 降级'} + 认知循环 + 记忆衰减 + 游客清理）`);
 }
 
 module.exports = startJobs;

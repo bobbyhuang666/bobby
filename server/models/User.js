@@ -49,11 +49,11 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 // 获取好感度等级
 userSchema.methods.getIntimacyLevel = function() {
   const i = this.intimacy;
-  if (i < 10) return { name: '陌生', desc: '你们还不太熟' };
-  if (i < 25) return { name: '认识', desc: '算是在网上见过' };
-  if (i < 45) return { name: '熟悉', desc: '有一种安静的默契' };
-  if (i < 70) return { name: '默契', desc: '不需要说太多' };
-  return { name: '信赖', desc: '你是它的深夜知己' };
+  if (i < 10) return { name: '陌生', desc: '你们还不太熟', value: i };
+  if (i < 25) return { name: '认识', desc: '算是在网上见过', value: i };
+  if (i < 45) return { name: '熟悉', desc: '有一种安静的默契', value: i };
+  if (i < 70) return { name: '默契', desc: '不需要说太多', value: i };
+  return { name: '信赖', desc: '你是它的深夜知己', value: i };
 };
 
 // 增加好感度

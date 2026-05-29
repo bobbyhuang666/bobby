@@ -1,8 +1,19 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const Note = require('../models/Note');
 const User = require('../models/User');
 const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const router = express.Router();
+
+// ObjectId 格式校验中间件
+function validateObjectId(paramName) {
+  return (req, res, next) => {
+    if (!mongoose.Types.ObjectId.isValid(req.params[paramName])) {
+      return res.status(400).json({ error: '无效的ID格式' });
+    }
+    next();
+  };
+}
 
 // 获取动态列表
 router.get('/', optionalAuth, async (req, res) => {
@@ -33,7 +44,7 @@ router.get('/', optionalAuth, async (req, res) => {
 });
 
 // 点赞/取消点赞
-router.post('/:id/like', authMiddleware, async (req, res) => {
+router.post('/:id/like', authMiddleware, validateObjectId('id'), async (req, res) => {
   try {
     const note = await Note.findById(req.params.id);
     if (!note) return res.status(404).json({ error: '动态不存在' });
@@ -65,11 +76,15 @@ router.post('/:id/like', authMiddleware, async (req, res) => {
 });
 
 // 评论动态
-router.post('/:id/comment', authMiddleware, async (req, res) => {
+router.post('/:id/comment', authMiddleware, validateObjectId('id'), async (req, res) => {
   try {
     const { content } = req.body;
     if (!content || !content.trim()) {
       return res.status(400).json({ error: '评论不能为空' });
+    }
+
+    if (content.length > 300) {
+      return res.status(400).json({ error: '评论太长了，最多300字' });
     }
 
     const bobbyEngine = req.app.get('bobbyEngine');

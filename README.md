@@ -170,8 +170,9 @@ Bobby 偶尔会发来一条消息：
 
 目前已具备：
 
-- 🌙 **状态机** — 40+ 状态，覆盖从"还没睡呢"到"在上课"的完整日常
-- 🌊 **情绪系统** — 30维情绪引擎，随昼夜节律自主演化
+- 🌙 **状态机** — 42 状态，覆盖从"还没睡呢"到"在上课"的完整日常
+- 🌊 **情绪系统** — 30维情绪引擎，基于 Cowen & Keltner (2017)，随昼夜节律自主演化
+- 🧠 **Andy 世界引擎** — 心理学驱动的多智能体社会模拟，Bobby 在一个自主运转的小世界里生活
 - 📝 **碎片动态** — Bobby 记录生活，你只是旁观者
 - 💬 **AI 对话** — DeepSeek 驱动，流式输出，非均匀打字节奏
 - 🎁 **礼物系统** — 12种礼物，匿名关心，它不会说谢谢
@@ -193,17 +194,37 @@ bobby/
 │   └── app.js                    # 2600+ 行，Canvas 粒子 + Web Audio 音效
 │
 └── server/                       # 后端
-    ├── app.js                    # Express + Socket.io
+    ├── app.js                    # Express + Socket.io + Andy 初始化
+    ├── bridge/
+    │   └── andyBridge.js         # Bobby ↔ Andy 桥接层
     ├── services/
-    │   └── bobbyEngine.js        # 核心引擎（40+ 状态的状态机）
-    ├── jobs/                     # 8 个定时任务（状态推进、碎片生成、情绪演化...）
+    │   └── bobbyEngine.js        # Bobby 引擎（状态机 + 消息处理）
+    ├── jobs/                     # 定时任务（Andy tick、碎片、低语、情绪演化...）
     ├── models/                   # BobbyState / Message / Note / User
     └── routes/                   # 认证 / 聊天 / 动态 / 礼物 / 用户
+
+Andy 引擎（独立仓库）:
+https://github.com/bobbyhuang666/andy-engine
+```
+
+**数据流：**
+
+```
+Andy tick (5min)
+  ├── 状态机推进 → Bobby 状态同步 → Socket 广播给用户
+  ├── 情绪演化（30维） → Bobby 情绪引擎参考信号
+  └── 世界事件/附近的人/需求状态 → system prompt 注入
+
+用户发消息
+  └── bridge.getWorldContext() → aiService.generateReply()
+      └── Andy 世界上下文替代旧 worldEngine 事件
 ```
 
 **技术栈：** Node.js · Express · MongoDB · Socket.io · DeepSeek API · Web Audio API
 
-**核心模块（未开源）：** emotionEngine · cognitiveLoop · memoryService · aiService
+**Andy 引擎：** 18 模块，1084 测试通过。详见 [andy-engine 仓库](https://github.com/bobbyhuang666/andy-engine)
+
+**Bobby 核心模块（未开源）：** emotionEngine · cognitiveLoop · memoryService · aiService
 
 ---
 
@@ -239,16 +260,34 @@ node app.js
 
 ## 核心模块说明
 
-本仓库开源了前端界面和基础后端框架，**以下 4 个核心模块未包含在仓库中**：
+本仓库开源了前端界面、基础后端框架、Andy 桥接层。**以下模块未包含在仓库中**：
+
+### Bobby 核心（未开源）
 
 | 模块 | 说明 |
 |------|------|
-| `emotionEngine.js` | 30维情绪系统 — 昼夜节律、粉红噪声、共激活扩散 |
+| `emotionEngine.js` | 30维情绪系统 — Cowen & Keltner (2017)，昼夜节律、粉红噪声、共激活扩散 |
 | `cognitiveLoop.js` | 认知循环 — 沉思、整合、记忆衰减 |
 | `memoryService.js` | 记忆系统 — 向量检索、用户画像、Dream-time 衰减 |
 | `aiService.js` | AI 提示词 — Bobby 人设、对话风格、碎碎念生成 |
 
 这些模块是 Bobby 的"灵魂"。还在持续打磨中，暂时未包含在公开仓库里。
+
+### Andy 引擎（独立开源）
+
+Andy 是一个心理学驱动的多智能体社会模拟引擎，作为 Bobby 的世界层运行。
+
+| 特性 | 说明 |
+|------|------|
+| 30维情绪 | Cowen & Keltner (2017) 情绪空间，10步演化 |
+| ACT-R 记忆 | 5通路融合检索 + 情绪一致性回忆 |
+| 认知评价 | Scherer CPM 8维度，同一事件不同角色不同反应 |
+| 社交图谱 | Dunbar 层级 + 三元闭合 + 八卦传播 |
+| 需求驱动 | Maslow 5层需求，人格调节衰减速率 |
+
+Andy 独立于 Bobby 运行，通过 `bridge/andyBridge.js` 接入。Andy 不可用时 Bobby 自动降级到自有状态机。
+
+仓库地址：**[github.com/bobbyhuang666/andy-engine](https://github.com/bobbyhuang666/andy-engine)**
 
 如果你对这个项目感兴趣，或者想一起探索"低压AI陪伴"的可能性，欢迎联系我：**huangweijiebobby@gmail.com**
 

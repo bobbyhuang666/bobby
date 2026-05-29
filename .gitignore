@@ -38,6 +38,16 @@ yarn-error.log*
 screenshots/*/
 test-output/
 
+# Backup directories
+_backup_before_andy/
+
+# Claude Code local config
+.claude/
+
+# Andy Engine（独立开源仓库，避免代码重复）
+# 仓库地址：https://github.com/bobbyhuang666/andy-engine
+server/andy/
+
 # Core IP (not open source)
 server/services/emotionEngine.js
 server/services/cognitiveLoop.js

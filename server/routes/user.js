@@ -49,7 +49,10 @@ router.put('/settings', authMiddleware, async (req, res) => {
     const user = await User.findById(req.userId);
     if (!user) return res.status(404).json({ error: '用户不存在' });
 
-    if (nickname !== undefined) user.nickname = nickname;
+    if (nickname !== undefined) {
+      if (nickname.length > 30) return res.status(400).json({ error: '昵称最长30个字' });
+      user.nickname = nickname;
+    }
     if (notifications !== undefined) user.settings.notifications = notifications;
     if (soundEnabled !== undefined) user.settings.soundEnabled = soundEnabled;
 

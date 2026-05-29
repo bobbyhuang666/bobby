@@ -8,7 +8,12 @@ const { MemoryService } = require('./memoryService');
 const { CognitiveLoop } = require('./cognitiveLoop');
 const { getTimeLabel, getTimePeriod } = require('../utils/time');
 
-// 状态机定义
+// ═══ Andy 引擎集成 ═══
+// 状态机委托给 Andy，保留 Bobby 自有状态机作为降级兜底
+let _useAndy = false;
+let _andyBridge = null;
+
+// Bobby 自有状态机（Andy 未初始化时兜底使用）
 const STATE_MACHINE = {
   '还没睡呢':    { next: ['在发呆', '在听歌', '在看窗外'], hours: [23,0,1,2] },
   '在发呆':      { next: ['在听歌', '困了但睡不着', '在看窗外'], hours: [23,0,1,2] },
@@ -28,6 +33,7 @@ const STATE_MACHINE = {
   '在食堂':      { next: ['吃完了', '在图书馆'], hours: [11,12] },
   '吃完了':      { next: ['在图书馆', '在上课'], hours: [12,13] },
   '有点困':      { next: ['在图书馆', '在发呆', '趴一会'], hours: [13,14,15] },
+  '趴一会':      { next: ['在图书馆', '在发呆', '有点困'], hours: [13,14,15] },
   '刚下班':      { next: ['在回家路上', '有点累'], hours: [17,18,19,20] },
   '在回家路上':  { next: ['到家了', '在便利店'], hours: [17,18,19,20] },
   '在便利店':    { next: ['到家了'], hours: [18,19,20] },
@@ -66,6 +72,18 @@ class BobbyEngine {
     this.state = null;
     this.emotion = null;  // 情绪引擎实例
     this.cognitive = null; // 认知循环实例
+    this.bridge = null;    // Andy 桥接层（可选）
+  }
+
+  /**
+   * 注入 AndyBridge（在 app.js 初始化后调用）
+   * @param {Object} bridge - AndyBridge 实例
+   */
+  setAndyBridge(bridge) {
+    this.bridge = bridge;
+    _andyBridge = bridge;
+    _useAndy = !!bridge;
+    console.log(`Andy 桥接层已注入 BobbyEngine（${_useAndy ? '启用' : '禁用'}）`);
   }
 
   // 初始化 Bobby 状态
@@ -109,6 +127,9 @@ class BobbyEngine {
     // 初始化认知循环
     this.cognitive = new CognitiveLoop(this.emotion, this);
 
+    // Andy 引擎初始化由 app.js 在 setAndyBridge() 后单独处理
+    // （因为 init() 在 setAndyBridge() 之前调用）
+
     this.updateStatus();
   }
 
@@ -135,6 +156,24 @@ class BobbyEngine {
   async updateStatus() {
     if (!this.state) return;
 
+    // ===== Andy 模式：状态由 Andy tick 驱动 =====
+    if (_useAndy && this.bridge) {
+      try {
+        const andyStatus = this.bridge.getBobbyStatus();
+        if (andyStatus && andyStatus !== this.state.currentStatus) {
+          this.state.currentStatus = andyStatus;
+          this.state.statusChangedAt = new Date();
+          await this.state.save();
+          this.broadcastStatus();
+        }
+        return;
+      } catch (err) {
+        console.error('Andy 状态更新失败，降级到 Bobby 自有状态机:', err.message);
+        _useAndy = false;
+      }
+    }
+
+    // ===== 降级：Bobby 自有状态机 =====
     const now = new Date();
     const hour = now.getHours();
     const elapsed = now - this.state.statusChangedAt;
@@ -259,6 +298,16 @@ class BobbyEngine {
       .limit(5)
       .lean();
 
+    // ===== 获取 Andy 世界上下文 =====
+    let worldContext = null;
+    if (_useAndy && this.bridge) {
+      try {
+        worldContext = this.bridge.getWorldContext();
+      } catch (err) {
+        // 降级：使用 worldEngine 事件
+      }
+    }
+
     const reply = await aiService.generateReply({
       userText: text,
       history: recentMessages.reverse(),
@@ -268,7 +317,8 @@ class BobbyEngine {
       timeLabel: this.getTimeLabel(),
       emotionEngine: this.emotion,
       memoryProfile,
-      recentThoughts: this.cognitive ? this.cognitive.getRecentThoughts() : []
+      recentThoughts: this.cognitive ? this.cognitive.getRecentThoughts() : [],
+      worldContext  // Andy 世界上下文（替代 worldEngine 事件）
     });
 
     // 保存 Bobby 回复
@@ -353,6 +403,74 @@ class BobbyEngine {
   isNight() {
     const h = new Date().getHours();
     return h >= 23 || h < 3;
+  }
+
+  // ===== Andy 引擎接口 =====
+
+  /**
+   * 执行一次 Andy tick（由定时任务调用）
+   * 推进 Andy 世界时间，同步 Bobby 状态和情绪
+   */
+  async tickAndy() {
+    if (!_useAndy || !this.bridge) return null;
+
+    try {
+      const result = this.bridge.tick();
+
+      // 同步 Andy 的状态到 Bobby 数据库
+      if (result && result.stateChanged) {
+        this.state.currentStatus = result.bobbyStatus;
+        this.state.statusChangedAt = new Date();
+        await this.state.save();
+        this.broadcastStatus();
+      }
+
+      // 将 Andy 的情绪数据注入 Bobby 情绪引擎作为参考信号
+      // （Andy 30 维情绪 → Bobby 情绪引擎的情绪输入）
+      if (result && result.bobbyEmotion && this.emotion) {
+        const emotionData = this.bridge.getBobbyEmotionData();
+        // 将 Andy 情绪的 valence 作为情绪引擎的额外输入
+        // 不完全替换 Bobby 自己的情绪，而是作为"环境情绪"影响
+        if (emotionData.valence !== undefined) {
+          this.emotion._andyValence = emotionData.valence;
+          this.emotion._andyStress = emotionData.stress;
+        }
+      }
+
+      return result;
+    } catch (err) {
+      console.error('Andy tick 失败:', err.message);
+      return null;
+    }
+  }
+
+  /**
+   * 持久化 Andy 世界状态到数据库
+   */
+  async persistAndyState() {
+    if (!_useAndy || !this.bridge || !this.state) return;
+
+    try {
+      const worldState = this.bridge.toJSON();
+      if (worldState) {
+        this.state.andyWorldState = worldState;
+        await this.state.save();
+      }
+    } catch (err) {
+      console.error('Andy 状态持久化失败:', err.message);
+    }
+  }
+
+  /**
+   * 获取 Andy 世界上下文（供外部调用）
+   */
+  getAndyWorldContext() {
+    if (!_useAndy || !this.bridge) return null;
+    try {
+      return this.bridge.getWorldContext();
+    } catch (err) {
+      return null;
+    }
   }
 }
 

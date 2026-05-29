@@ -32,7 +32,10 @@ const bobbyStateSchema = new mongoose.Schema({
   },
 
   // 上次情绪 tick 时间
-  lastEmotionTick: { type: Date, default: Date.now }
+  lastEmotionTick: { type: Date, default: Date.now },
+
+  // Andy 世界引擎状态（持久化，用于重启恢复）
+  andyWorldState: { type: mongoose.Schema.Types.Mixed, default: null }
 }, { timestamps: true });
 
 module.exports = mongoose.model('BobbyState', bobbyStateSchema);
