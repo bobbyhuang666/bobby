@@ -1,0 +1,32 @@
+{
+  "name": "bobby-server",
+  "version": "2.0.0",
+  "description": "Bobby - AI陪伴生命体 后端服务（Andy 世界引擎）",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js",
+    "test": "jest --forceExit",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage --forceExit",
+    "test:integration": "jest --config jest.config.integration.js --forceExit",
+    "test:all": "npm test && npm run test:integration",
+    "test:ci": "jest --ci --reporters=default --reporters=jest-junit"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.4",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.0.0",
+    "node-cron": "^3.0.3",
+    "socket.io": "^4.7.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "mongodb-memory-server": "^11.2.0",
+    "nodemon": "^3.0.2"
+  }
+}

@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0d0d12">
+  <title>Bobby</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai:wght@300;400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <!-- 背景粒子 -->
+    <canvas id="particles"></canvas>
+
+    <!-- 引导页 -->
+    <div class="onboarding" id="onboarding">
+      <canvas id="onboardingParticles"></canvas>
+      <div class="onboarding-content">
+        <div class="onboarding-avatar-wrap">
+          <div class="breathing-avatar large">
+            <img src="images/avatar.svg" alt="Bobby" />
+          </div>
+        </div>
+        <h1 class="onboarding-title">Bobby</h1>
+        <p class="onboarding-subtitle">一个住在厦门的大学生</p>
+        <div class="onboarding-steps">
+          <div class="onboarding-step" id="step1">
+            <p class="step-text">白天上课打工，有自己的生活</p>
+          </div>
+          <div class="onboarding-step" id="step2">
+            <p class="step-text">深夜睡不着的时候，才会出现</p>
+          </div>
+          <div class="onboarding-step" id="step3">
+            <p class="step-text">偶尔会发一些生活的碎片</p>
+          </div>
+          <div class="onboarding-step" id="step4">
+            <p class="step-text">它不是客服，不会秒回</p>
+          </div>
+          <div class="onboarding-step" id="step5">
+            <p class="step-text">像一个远方的朋友，平行存在着</p>
+          </div>
+        </div>
+        <button class="onboarding-btn" id="onboardingBtn" onclick="closeOnboarding()">认识一下</button>
+      </div>
+    </div>
+
+    <!-- ========== 聊天页面 ========== -->
+    <div id="chatPage" class="page active">
+      <div class="header transparent">
+        <div class="header-left" onclick="showPage('profilePage')" style="cursor:pointer;">
+          <div class="breathing-avatar small">
+            <img src="images/ai-avatar.svg" alt="Bobby" />
+          </div>
+          <div class="header-info">
+            <span class="header-title">Bobby</span>
+            <span class="header-status" id="chatStatus">还没睡呢</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-area" id="chatArea">
+        <div class="recent-note-hint" id="recentNoteHint"></div>
+        <div class="msg-list" id="msgList"></div>
+        <div class="typing" id="typing">
+          <div class="typing-bubble">
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="input-bar">
+        <input type="text" class="input-box" id="inputBox" placeholder="说点什么...">
+        <button class="send-btn" id="sendBtn" disabled onclick="sendMessage()">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M3 10L17 3L10 17L9 11L3 10Z" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- ========== 主页 ========== -->
+    <div id="profilePage" class="page">
+      <div class="profile-hero">
+        <div class="profile-hero-bg"></div>
+        <div class="profile-hero-content">
+          <div class="breathing-avatar large">
+            <img src="images/avatar.svg" alt="Bobby" />
+          </div>
+          <h2 class="profile-name">Bobby</h2>
+          <div class="profile-tagline" id="profileTagline">和你平行存在</div>
+          <div class="profile-mood">
+            <span class="mood-dot" id="moodDot"></span>
+            <span class="mood-text" id="moodText">还没睡呢</span>
+          </div>
+          <div class="intimacy-bar" id="intimacyBar">
+            <div class="intimacy-level" id="intimacyLevel">陌生</div>
+            <div class="intimacy-track">
+              <div class="intimacy-fill" id="intimacyFill" style="width: 0%"></div>
+            </div>
+            <div class="intimacy-desc" id="intimacyDesc">你们还不太熟</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="profile-body">
+        <!-- 此刻 - 感官体验卡片 -->
+        <div class="moment-card" id="momentCard">
+          <div class="moment-label">此刻</div>
+          <div class="moment-text" id="momentText">窗户上有雾气，外面的灯光有点模糊。</div>
+        </div>
+
+        <!-- 送礼入口 -->
+        <div class="gift-entry" onclick="showGiftPanel()">
+          <span class="gift-entry-icon">☕</span>
+          <span class="gift-entry-text">送点什么</span>
+          <span class="gift-entry-arrow">›</span>
+        </div>
+
+        <!-- 最近动态 -->
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">最近的碎片</span>
+            <button class="section-more" onclick="showPage('notesPage')">查看全部</button>
+          </div>
+          <div id="profileNotes"></div>
+        </div>
+
+        <!-- 关于 -->
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">关于</span>
+          </div>
+          <div class="about-cards">
+            <div class="about-card">
+              <span class="about-icon">🌙</span>
+              <div class="about-info">
+                <span class="about-label">现在</span>
+                <span class="about-value" id="aboutActiveTime">23:00 - 03:00</span>
+              </div>
+            </div>
+            <div class="about-card">
+              <span class="about-icon">📍</span>
+              <div class="about-info">
+                <span class="about-label">所在地</span>
+                <span class="about-value">厦门</span>
+              </div>
+            </div>
+            <div class="about-card">
+              <span class="about-icon">💭</span>
+              <div class="about-info">
+                <span class="about-label">一句话</span>
+                <span class="about-value">生活在平行世界的一座小岛</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- VIP 入口 -->
+        <div class="vip-card" onclick="showVipPanel()">
+          <div class="vip-card-content">
+            <div class="vip-card-title">深夜知己</div>
+            <div class="vip-card-desc">敬请期待</div>
+          </div>
+          <span class="gift-entry-arrow">›</span>
+        </div>
+
+        <!-- 关系卡片入口 -->
+        <div class="gift-entry" onclick="showRelationshipCard()" style="margin-bottom: 24px;">
+          <span class="gift-entry-icon">📋</span>
+          <span class="gift-entry-text">我们的关系</span>
+          <span class="gift-entry-arrow">›</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 动态页面 ========== -->
+    <div id="notesPage" class="page">
+      <div class="header">
+        <button class="header-back" onclick="showPage('profilePage')">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div class="header-info">
+          <span class="header-title">Bobby 的碎片</span>
+          <span class="header-status" id="notesStatus"></span>
+        </div>
+        <div class="header-right"></div>
+      </div>
+
+      <div class="notes-timeline" id="notesList"></div>
+    </div>
+
+    <!-- ========== 全局 Tab 栏（只有一份）========== -->
+    <div class="tab-bar" id="globalTabBar">
+      <button class="tab active" data-page="chatPage">
+        <div class="tab-indicator"></div>
+        <span class="tab-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        </span>
+        <span class="tab-label">对话</span>
+      </button>
+      <button class="tab" data-page="profilePage">
+        <div class="tab-indicator"></div>
+        <span class="tab-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a6.5 6.5 0 0 1 13 0"/></svg>
+        </span>
+        <span class="tab-label">主页</span>
+      </button>
+      <button class="tab" data-page="notesPage">
+        <div class="tab-indicator"></div>
+        <span class="tab-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </span>
+        <span class="tab-label">动态</span>
+      </button>
+    </div>
+
+    <!-- ========== 礼物面板 ========== -->
+    <div class="gift-panel" id="giftPanel" onclick="hideGiftPanel()">
+      <div class="gift-sheet" onclick="event.stopPropagation()">
+        <div class="gift-handle"></div>
+        <h3 class="gift-title">送点什么</h3>
+        <p class="gift-subtitle">它不会知道是你送的。但后果自负。</p>
+        <div class="gift-grid" id="giftGrid"></div>
+      </div>
+    </div>
+
+    <!-- 送礼成功动画 -->
+    <div class="gift-success" id="giftSuccess">
+      <div class="gift-success-content">
+        <div class="gift-success-emoji" id="giftSuccessEmoji"></div>
+        <p class="gift-success-text">已悄悄送出</p>
+      </div>
+    </div>
+
+    <!-- 关系卡片面板 -->
+    <div class="relationship-panel" id="relationshipPanel" onclick="hideRelationshipCard()">
+      <div class="relationship-card" onclick="event.stopPropagation()" id="relationshipCardContent">
+        <div class="relationship-card-header">
+          <div class="breathing-avatar large">
+            <img src="images/avatar.svg" alt="Bobby" />
+          </div>
+          <h3 class="relationship-card-title">Bobby</h3>
+          <div class="relationship-card-subtitle" id="rcSubtitle">深夜才会上线的存在</div>
+        </div>
+        <div class="relationship-card-stats">
+          <div class="rc-stat">
+            <div class="rc-stat-value" id="rcDays">1</div>
+            <div class="rc-stat-label">相遇天数</div>
+          </div>
+          <div class="rc-stat">
+            <div class="rc-stat-value" id="rcMessages">0</div>
+            <div class="rc-stat-label">对话数</div>
+          </div>
+          <div class="rc-stat">
+            <div class="rc-stat-value" id="rcLevel">陌生</div>
+            <div class="rc-stat-label">关系</div>
+          </div>
+        </div>
+        <div class="relationship-card-quote">
+          "缺席创造挂念。留白产生羁绊。"
+        </div>
+        <div class="relationship-card-story" id="rcStory"></div>
+        <div class="relationship-card-footer">
+          Bobby · AI陪伴生命体
+        </div>
+      </div>
+    </div>
+
+    <!-- VIP 面板 -->
+    <div class="vip-panel" id="vipPanel" onclick="hideVipPanel()">
+      <div class="vip-sheet" onclick="event.stopPropagation()">
+        <div class="gift-handle"></div>
+        <h3 class="gift-title">深夜知己</h3>
+        <p class="gift-subtitle">正在认真思考中…</p>
+
+        <div style="text-align: center; padding: 40px 20px;">
+          <div style="font-size: 48px; margin-bottom: 16px;">🌙</div>
+          <p style="color: var(--text-secondary); font-size: 14px; line-height: 2; margin-bottom: 24px;">
+            Bobby 还在想<br>怎么才能更好地记住你<br><br>
+            <span style="color: var(--text-muted); font-size: 12px;">敬请期待</span>
+          </p>
+          <button class="vip-btn" onclick="showToast('开放后第一时间通知你')" style="margin-top: 12px;">开放时通知我</button>
+        </div>
+
+        <p class="vip-note">所有互动都是匿名的。Bobby 不知道你是不是 VIP。</p>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"></div>
+
+    <!-- 消息长按菜单 -->
+    <div class="msg-context-menu" id="msgContextMenu">
+      <button class="context-menu-item" onclick="copySelectedMsg()">复制</button>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/bobbyDefaults.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

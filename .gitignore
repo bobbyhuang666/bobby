@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build outputs
+dist/
+build/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+*.tmp
+*.bak
+*.backup
+
+# Test coverage output
+server/coverage/
+
+# Experiments (developer-specific scripts)
+experiments/
+
+# Screenshots & test artifacts
+screenshots/*/
+test-output/
+
+# Backup directories
+_backup_before_andy/
+
+# Claude Code local config
+.claude/
+
+# Andy Engine（独立开源仓库，避免代码重复）
+# 仓库地址：https://github.com/bobbyhuang666/andy-engine
+server/andy/
