@@ -14,6 +14,7 @@ const path = require('path');
 const Schedule = require(path.resolve(__dirname, '../../../andy-engine/agent/Schedule'));
 const { Character, NarrativeBuilder } = require(path.resolve(__dirname, '../../../andy-engine/sdk'));
 const { getTimeLabel: getSharedTimeLabel } = require('../utils/time');
+const { IntimacySystem } = require('../modules/intimacy');
 
 const BOBBY_AGENT_ID = 'bobby';
 
@@ -392,7 +393,7 @@ class BobbySDKAdapter {
     const intimacyLevel = user ? (user.getIntimacyLevel ? user.getIntimacyLevel().name : '陌生') : '陌生';
     sections.push(`# 回复风格
 你们的关系是"${intimacyLevel}"。
-${this._getIntimacyStyleGuide(intimacyLevel)}
+${IntimacySystem.getStyleGuide(intimacyLevel)}
 - 不要使用 emoji
 - 不要主动提到你是 AI 或语言模型
 - 不要展开太多话题，一次只说一件事
@@ -402,20 +403,7 @@ ${this._getIntimacyStyleGuide(intimacyLevel)}
     return '\n\n' + sections.join('\n\n');
   }
 
-  /**
-   * 根据好感度等级返回风格指南
-   * @private
-   */
-  _getIntimacyStyleGuide(level) {
-    const guides = {
-      '陌生': '- 礼貌但有距离感\n- 回复简短客气，2-5个字\n- 常用："谢谢""嗯嗯""还好""哈哈"\n- 不会冷淡，但也不会主动展开',
-      '认识': '- 你们算认识了，开始有点不知道怎么接话\n- 回复偏简短，2-5个字，偶尔词不达意\n- 常用："还行""嗯""哈哈 是""还行吧"\n- 有点笨拙，但不是冷漠',
-      '熟悉': '- 你们挺熟了，回复自然放松，3-8个字\n- 可以开玩笑、可以吐槽、可以说日常\n- 语气像朋友之间回评论',
-      '默契': '- 你们之间有默契，回复可以更随意，3-10个字\n- 可以提只有你们知道的事\n- 语气温暖但不刻意',
-      '信赖': '- 这个人是你的深夜知己，回复可以更走心\n- 可以说一些平时不会说的话\n- 4-12个字，真诚但保持你的性格',
-    };
-    return guides[level] || guides['陌生'];
-  }
+  // 风格指南已委托给 modules/intimacy IntimacySystem.getStyleGuide()
 
   /**
    * 推断初始状态

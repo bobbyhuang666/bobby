@@ -1,7 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const { BOBBY_DEFAULTS } = require('../config/bobbyDefaults');
-const { intimacyLevels } = BOBBY_DEFAULTS;
+const { IntimacySystem } = require('../modules/intimacy');
 
 const userSchema = new mongoose.Schema({
   // 基本信息
@@ -48,24 +47,16 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// 获取好感度等级（从共享配置读取阈值）
+// 获取好感度等级（委托 IntimacySystem）
 userSchema.methods.getIntimacyLevel = function() {
-  const i = this.intimacy;
-  // 从高到低匹配，找到第一个 threshold <= i 的等级
-  for (let j = intimacyLevels.length - 1; j >= 0; j--) {
-    if (i >= intimacyLevels[j].threshold) {
-      return { name: intimacyLevels[j].name, desc: intimacyLevels[j].desc, value: i };
-    }
-  }
-  return { name: intimacyLevels[0].name, desc: intimacyLevels[0].desc, value: i };
+  return IntimacySystem.getLevel(this.intimacy);
 };
 
-// 增加好感度
+// 增加好感度（委托 IntimacySystem）
 userSchema.methods.addIntimacy = function(points) {
-  const oldLevel = this.getIntimacyLevel().name;
-  this.intimacy = Math.max(0, Math.min(100, this.intimacy + points));
-  const newLevel = this.getIntimacyLevel().name;
-  return oldLevel !== newLevel; // 返回是否升级
+  const result = IntimacySystem.addPoints(this.intimacy, points);
+  this.intimacy = result.newValue;
+  return result.upgraded;
 };
 
 module.exports = mongoose.model('User', userSchema);

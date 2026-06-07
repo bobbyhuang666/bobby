@@ -8,6 +8,7 @@ const { MemoryService } = require('./memoryService');
 const { CognitiveLoop } = require('./cognitiveLoop');
 const { getTimeLabel, getTimePeriod } = require('../utils/time');
 const { getWeatherContext } = require('./weatherService');
+const { NoteSystem } = require('../modules/notes');
 const { BOBBY_DEFAULTS } = require('../config/bobbyDefaults');
 const bcfg = BOBBY_DEFAULTS;
 
@@ -293,30 +294,10 @@ class BobbyEngine {
    * 优先级：状态专属碎片 > 情绪倾向碎片 > 通用碎片池
    */
   selectFragment(dailyNotes) {
-    const status = this.state ? this.state.currentStatus : '';
-    const stateFragments = bcfg.stateFragments || {};
-    const emotionFragments = bcfg.emotionFragments || {};
-
-    // 60% 概率尝试状态专属碎片
-    if (Math.random() < 0.6 && stateFragments[status]) {
-      const pool = stateFragments[status];
-      return pool[Math.floor(Math.random() * pool.length)];
-    }
-
-    // 情绪倾向碎片（valence 偏离中性时）
-    if (this.emotion && this.emotion.getValence) {
-      const valence = this.emotion.getValence();
-      const et = bcfg.emotionTransition;
-      if (valence < et.negativeThreshold && emotionFragments.negative && Math.random() < 0.4) {
-        return emotionFragments.negative[Math.floor(Math.random() * emotionFragments.negative.length)];
-      }
-      if (valence > et.positiveThreshold && emotionFragments.positive && Math.random() < 0.4) {
-        return emotionFragments.positive[Math.floor(Math.random() * emotionFragments.positive.length)];
-      }
-    }
-
-    // 兜底：通用碎片池
-    return dailyNotes[Math.floor(Math.random() * dailyNotes.length)];
+    return NoteSystem.selectFragment({
+      status: this.state ? this.state.currentStatus : '',
+      emotionEngine: this.emotion,
+    });
   }
 
   /**

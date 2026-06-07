@@ -4,6 +4,7 @@ const MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-chat';
 const { getWeatherContext } = require('./weatherService');
 const { BobbyMemoryService } = require('./bobbyMemory');
 const { WorldEngine } = require('./worldEngine');
+const { IntimacySystem } = require('../modules/intimacy');
 
 async function callDeepSeek(messages, options = {}) {
   const response = await fetch(API_URL, {
@@ -158,15 +159,7 @@ ${timeInfo}。你当前的状态是：${bobbyStatus}。
     else if (user.mood === 'insomnia') prompt += `\n对方又失眠了，你懂这种感觉。你可以说"我也睡不着"，然后你们可以有一搭没一搭地聊。深夜的对话会更安静、更真实。`;
 
     const level = user.getIntimacyLevel();
-    if (level.name === '默契' || level.name === '信赖') {
-      prompt += `\n你们之间有一种不需要说破的默契。可以更自然地分享日常，不用刻意找话题。`;
-    } else if (level.name === '熟悉') {
-      prompt += `\n你们挺熟了，可以自然地聊天，偶尔会开个小玩笑。`;
-    } else if (level.name === '认识') {
-      prompt += `\n你们算认识了，聊天会稍微放松一点，但还是会有点拘谨。`;
-    } else if (level.name === '陌生') {
-      prompt += `\n你们刚认识，不太会接话，但不会冷冰冰地推开对方。笨拙但真诚。`;
-    }
+    prompt += `\n${IntimacySystem.getPromptInjection(level.name)}`;
 
     if (user.giftsSent && user.giftsSent.length > 0) {
       prompt += `\n最近好像有人给你送过东西。你不知道是谁，但心里有点暖。可能会在某个发呆的瞬间想起这件事。`;
@@ -240,31 +233,7 @@ async function generateCommentReply(noteContent, userComment, intimacyLevel = '�
     // 天气获取失败不影响回复
   }
 
-  // 根据好感度调整回复风格
-  let styleGuide;
-  if (intimacyLevel === '陌生') {
-    styleGuide = `- 你们刚认识，礼貌但有距离感
-- 回复简短客气，2-5个字
-- 常用："谢谢""嗯嗯""还好""哈哈"
-- 不会冷淡，但也不会主动展开`;
-  } else if (intimacyLevel === '认识') {
-    styleGuide = `- 你们算认识了，开始有点不知道怎么接话
-- 回复偏简短，2-5个字，偶尔词不达意
-- 常用："还行""嗯""哈哈 是""还行吧"
-- 有点笨拙，但不是冷漠`;
-  } else if (intimacyLevel === '熟悉') {
-    styleGuide = `- 你们挺熟了，回复自然放松，3-8个字
-- 可以开玩笑、可以吐槽、可以说日常
-- 语气像朋友之间回评论`;
-  } else if (intimacyLevel === '默契') {
-    styleGuide = `- 你们之间有默契，回复可以更随意，3-10个字
-- 可以提只有你们知道的事
-- 语气温暖但不刻意`;
-  } else {
-    styleGuide = `- 这个人是你的深夜知己，回复可以更走心
-- 可以说一些平时不会说的话
-- 4-12个字，真诚但保持你的性格`;
-  }
+  const styleGuide = IntimacySystem.getStyleGuide(intimacyLevel);
 
   const messages = [
     {
