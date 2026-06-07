@@ -177,7 +177,7 @@ ${timeInfo}。你当前的状态是：${bobbyStatus}。
 }
 
 // 生成聊天回复
-async function generateReply({ userText, history, user, bobbyStatus, recentNotes, timeLabel, emotionEngine, memoryProfile, recentThoughts, andyNarrative }) {
+async function generateReply({ userText, history, user, bobbyStatus, recentNotes, timeLabel, emotionEngine, memoryProfile, recentThoughts, andyNarrative, systemPrompt: externalSystemPrompt, isAndyMode: externalAndyMode }) {
   // Andy 可用时：andyNarrative 已包含情绪/需求/记忆/认知，不需要额外获取世界事件
   // Andy 不可用时：从 worldEngine 降级事件库获取
   const [weatherContext, bobbySelfMemory, worldEvents] = await Promise.all([
@@ -195,8 +195,11 @@ async function generateReply({ userText, history, user, bobbyStatus, recentNotes
           .catch(() => '')
   ]);
 
-  const isAndyMode = !!andyNarrative;
-  const systemPrompt = buildSystemPrompt({
+  const isAndyMode = externalAndyMode !== undefined ? externalAndyMode : !!andyNarrative;
+
+  // SDK adapter 模式：使用 adapter 构建的 systemPrompt
+  // 降级模式：使用 aiService 自有的 buildSystemPrompt()
+  const systemPrompt = externalSystemPrompt || buildSystemPrompt({
     user, bobbyStatus, recentNotes, timeLabel,
     emotionEngine, memoryProfile, recentThoughts, weatherContext, bobbySelfMemory,
     worldEvents, andyNarrative,

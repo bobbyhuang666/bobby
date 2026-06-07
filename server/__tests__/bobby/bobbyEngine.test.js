@@ -83,6 +83,10 @@ jest.mock('../../utils/time', () => ({
   getTimePeriod: jest.fn().mockReturnValue('afternoon'),
 }));
 
+jest.mock('../../services/weatherService', () => ({
+  getWeatherContext: jest.fn().mockResolvedValue(''),
+}));
+
 const BobbyEngine = require('../../services/bobbyEngine');
 const { EmotionEngine } = require('../../services/emotionEngine');
 

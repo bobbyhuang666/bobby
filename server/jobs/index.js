@@ -83,8 +83,8 @@ const WHISPERS_DAY = ['嗯', '困', '来了'];
 const MUTTERS_NIGHT = ['下雨了', '路灯灭了', '月亮挺亮的', '隔壁灯也灭了', '猫又来了', '好困...', '外面好安静'];
 const MUTTERS_DAY = ['今天阳光不错', '树叶在晃', '有点饿了', '困', '风好大'];
 
-function startJobs(bobbyEngine, io, andyBridge) {
-  const hasAndy = !!andyBridge;
+function startJobs(bobbyEngine, io, sdkAdapter) {
+  const hasAndy = !!sdkAdapter;
 
   // ===== Andy Tick：每 5 分钟推进 Andy 世界 =====
   if (hasAndy) {

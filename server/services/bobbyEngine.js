@@ -7,13 +7,15 @@ const { EmotionEngine } = require('./emotionEngine');
 const { MemoryService } = require('./memoryService');
 const { CognitiveLoop } = require('./cognitiveLoop');
 const { getTimeLabel, getTimePeriod } = require('../utils/time');
+const { getWeatherContext } = require('./weatherService');
 const { BOBBY_DEFAULTS } = require('../config/bobbyDefaults');
 const bcfg = BOBBY_DEFAULTS;
 
 // ═══ Andy 引擎集成 ═══
-// 状态机委托给 Andy，保留 Bobby 自有状态机作为降级兜底
+// SDK 适配层委托给 Character SDK，保留 Bobby 自有状态机作为降级兜底
 let _useAndy = false;
 let _andyBridge = null;
+let _sdkAdapter = null;
 
 // Bobby 自有状态机（Andy 未初始化时兜底使用）
 const STATE_MACHINE = {
@@ -78,14 +80,20 @@ class BobbyEngine {
   }
 
   /**
-   * 注入 AndyBridge（在 app.js 初始化后调用）
-   * @param {Object} bridge - AndyBridge 实例
+   * 注入 SDK 适配层（在 app.js 初始化后调用）
+   * @param {Object} adapter - BobbySDKAdapter 实例
    */
+  setSDKAdapter(adapter) {
+    this.bridge = adapter;
+    _sdkAdapter = adapter;
+    _andyBridge = adapter; // 兼容旧引用
+    _useAndy = !!adapter;
+    console.log(`SDK 适配层已注入 BobbyEngine（${_useAndy ? '启用' : '禁用'}）`);
+  }
+
+  /** @deprecated 保留旧方法名做别名 */
   setAndyBridge(bridge) {
-    this.bridge = bridge;
-    _andyBridge = bridge;
-    _useAndy = !!bridge;
-    console.log(`Andy 桥接层已注入 BobbyEngine（${_useAndy ? '启用' : '禁用'}）`);
+    this.setSDKAdapter(bridge);
   }
 
   // 初始化 Bobby 状态
@@ -174,7 +182,7 @@ class BobbyEngine {
     // ===== Andy 模式：状态由 Andy tick 驱动 =====
     if (_useAndy && this.bridge) {
       try {
-        const andyStatus = this.bridge.getBobbyStatus();
+        const andyStatus = this.bridge.getBobbyStatus();  // adapter 兼容同名方法
         if (andyStatus && andyStatus !== this.state.currentStatus) {
           await this._updateState({
             $set: { currentStatus: andyStatus, statusChangedAt: new Date() }
@@ -365,14 +373,13 @@ class BobbyEngine {
     // Andy 可用时：情绪演化由 Andy tick 驱动（每5分钟），这里只做用户情绪感染
     // Andy 不可用时：Bobby 自有引擎完整 tick（衰减+感染+昼夜+噪声+共激活）
     if (_useAndy && this.bridge) {
-      // Andy 模式：用户消息情绪信号传给 Andy（通过 EmotionSignalBuffer）
-      // 信号会在下一次 Andy tick 时被消费，注入 Bobby Agent 的情绪状态
+      // SDK 模式：用户消息情绪信号传给 Character（通过 adapter）
       try {
-        this.bridge.onUserMessage(text);
+        if (this.bridge.onUserMessage) this.bridge.onUserMessage(text);
       } catch (e) {
         // 信号发送失败不影响聊天
       }
-      // 同时感染 Bobby 本地情绪（作为即时响应，不等 Andy tick）
+      // 同时感染 Bobby 本地情绪（作为即时响应）
       this.emotion._emotionalContagion(text);
     } else {
       // 降级模式：Bobby 自有引擎完整演化
@@ -403,8 +410,7 @@ class BobbyEngine {
       Message.find({ userId }).sort({ createdAt: -1 }).limit(bcfg.chat.recentMessagesLimit).lean(),
       // 最新动态
       Note.find().sort({ publishedAt: -1 }).limit(bcfg.chat.recentNotesLimit).lean(),
-      // Andy 内心叙事（替代原来的世界上下文文本拼接）
-      // 传入用户消息 + 好感度，让叙事通过关系感知的共情反映用户情绪影响
+      // SDK 叙事（adapter 提供合成叙事，降级模式为空）
       (_useAndy && this.bridge)
         ? Promise.resolve().then(() => {
             try { return this.bridge.getNarrative({ userText: text, intimacy: user.intimacy || 0 }); }
@@ -412,6 +418,39 @@ class BobbyEngine {
           })
         : Promise.resolve('')
     ]);
+
+    // Andy 模式：用 SDK adapter 构建 system prompt（Character 状态 + 天气 + 碎片 + 亲密风格）
+    // 降级模式：aiService.buildSystemPrompt() 使用本地 EmotionEngine + CognitiveLoop
+    let systemPrompt = null;
+    let weatherContext = null;
+    if (_useAndy && this.bridge && this.bridge.buildSystemPrompt) {
+      try {
+        weatherContext = await getWeatherContext();
+      } catch (e) { weatherContext = null; }
+
+      const bobbySelfMemory = await (async () => {
+        try {
+          const { BobbyMemoryService } = require('./bobbyMemory');
+          // 组合 Bobby 的自我记忆上下文（按类别取前2条高权重记忆）
+          const categories = ['food', 'sleep', 'study', 'work', 'hobby', 'mood', 'daily', 'room', 'social'];
+          const parts = [];
+          for (const cat of categories) {
+            const items = await BobbyMemoryService.getByCategory(cat);
+            if (items.length > 0) parts.push(items.slice(0, 2).join('；'));
+          }
+          return parts.join('。');
+        } catch (e) { return ''; }
+      })();
+
+      systemPrompt = this.bridge.buildSystemPrompt({
+        user,
+        recentNotes,
+        weatherContext,
+        bobbySelfMemory,
+        memoryProfile,
+        recentThoughts: this.cognitive ? this.cognitive.getRecentThoughts() : [],
+      });
+    }
 
     const reply = await aiService.generateReply({
       userText: text,
@@ -423,7 +462,9 @@ class BobbyEngine {
       emotionEngine: this.emotion,
       memoryProfile,
       recentThoughts: this.cognitive ? this.cognitive.getRecentThoughts() : [],
-      andyNarrative  // Andy 引擎合成的内心叙事（替代 worldContext）
+      andyNarrative,
+      systemPrompt,
+      isAndyMode: _useAndy,
     });
 
     // 保存 Bobby 回复
@@ -530,6 +571,7 @@ class BobbyEngine {
   _degradeFromAndy(reason) {
     console.error(`Andy 降级: ${reason}，切换到 Bobby 自有模式`);
     _useAndy = false;
+    _sdkAdapter = null;
 
     // 清理 EmotionEngine 上的 stale Andy 注入数据
     if (this.emotion) {
@@ -550,7 +592,7 @@ class BobbyEngine {
     try {
       const result = this.bridge.tick();
 
-      // 同步 Andy 的状态到 Bobby 数据库
+      // 同步状态到 Bobby 数据库
       if (result && result.stateChanged) {
         await this._updateState({
           $set: { currentStatus: result.bobbyStatus, statusChangedAt: new Date() }
@@ -558,12 +600,10 @@ class BobbyEngine {
         this.broadcastStatus();
       }
 
-      // Andy 模式：将 Andy 的情绪状态同步到 Bobby 的 EmotionEngine
-      // Bobby 不再独立演化情绪，而是作为 Andy 情绪的同步镜像
-      // 这样 toPromptString() 始终反映 Andy 的真实情绪状态
+      // 将 SDK Character 的情绪状态同步到 Bobby 的 EmotionEngine
       if (result && result.bobbyEmotion && this.emotion) {
         const emotionData = this.bridge.getBobbyEmotionData();
-        if (emotionData.valence !== undefined) {
+        if (emotionData && emotionData.valence !== undefined) {
           this.emotion._andyValence = emotionData.valence;
           this.emotion._andyArousal = emotionData.arousal;
           this.emotion._andyStress = emotionData.stress;
@@ -585,12 +625,13 @@ class BobbyEngine {
     if (!_useAndy || !this.bridge || !this.state) return;
 
     try {
+      // adapter.toJSON() 返回 Character.save() 的完整状态
       const worldState = this.bridge.toJSON();
       if (worldState) {
         await this._updateState({ $set: { andyWorldState: worldState } });
       }
     } catch (err) {
-      console.error('Andy 状态持久化失败:', err.message);
+      console.error('SDK 状态持久化失败:', err.message);
     }
   }
 
@@ -604,6 +645,14 @@ class BobbyEngine {
     } catch (err) {
       return null;
     }
+  }
+
+  /**
+   * 获取 SDK 适配层实例（供外部访问 Character SDK）
+   * @returns {BobbySDKAdapter|null}
+   */
+  getSDKAdapter() {
+    return _sdkAdapter;
   }
 }
 

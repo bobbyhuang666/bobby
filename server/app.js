@@ -24,7 +24,7 @@ const BobbyEngine = require('./services/bobbyEngine');
 const startJobs = require('./jobs');
 const { BobbyMemoryService } = require('./services/bobbyMemory');
 const { WorldEngine } = require('./services/worldEngine');
-const { AndyBridge } = require('./bridge/andyBridge');
+const { BobbySDKAdapter } = require('./bridge/BobbySDKAdapter');
 
 const app = express();
 const server = http.createServer(app);
@@ -160,42 +160,41 @@ async function start() {
   await BobbyMemoryService.init();
   console.log('Bobby 记忆库已初始化');
 
-  // Andy 引擎（心理学驱动的多智能体世界模拟）
-  let andyBridge = null;
+  // SDK 适配层（Character SDK 驱动的多智能体世界模拟）
+  let sdkAdapter = null;
   try {
-    andyBridge = new AndyBridge();
-    bobbyEngine.setAndyBridge(andyBridge);
-    // Andy 初始化在 setAndyBridge 后由 BobbyEngine.init() 内部完成
-    // 但因为 init() 已经跑完了，这里需要手动初始化
+    sdkAdapter = new BobbySDKAdapter();
+    bobbyEngine.setSDKAdapter(sdkAdapter);
+    // SDK 初始化：恢复持久化状态或创建新角色
     const BobbyState = require('./models/BobbyState');
     const bobbyState = await BobbyState.findOne({ _singleton: 'bobby' });
-    await andyBridge.init({
+    await sdkAdapter.init({
       bobbyState,
       savedState: bobbyState?.andyWorldState || null,
     });
-    // 用 Andy 的状态同步 Bobby
-    const andyStatus = andyBridge.getBobbyStatus();
-    if (andyStatus && bobbyState && andyStatus !== bobbyState.currentStatus) {
-      bobbyState.currentStatus = andyStatus;
+    // 用 SDK 状态同步 Bobby
+    const sdkStatus = sdkAdapter.getBobbyStatus();
+    if (sdkStatus && bobbyState && sdkStatus !== bobbyState.currentStatus) {
+      bobbyState.currentStatus = sdkStatus;
       bobbyState.statusChangedAt = new Date();
       await bobbyState.save();
     }
-    console.log('Andy 世界引擎已初始化');
+    console.log('Bobby SDK 适配层已初始化');
   } catch (err) {
-    console.error('Andy 初始化失败，使用 Bobby 自有状态机:', err.message);
-    andyBridge = null;
+    console.error('SDK 初始化失败，使用 Bobby 自有状态机:', err.message);
+    sdkAdapter = null;
   }
 
-  // 世界引擎（Andy 未启用时的降级方案）
-  if (!andyBridge) {
+  // 世界引擎（SDK 未启用时的降级方案）
+  if (!sdkAdapter) {
     await WorldEngine.init();
     console.log('世界引擎已初始化（降级模式）');
   } else {
-    console.log('世界引擎由 Andy 接管，旧 worldEngine 跳过');
+    console.log('世界引擎由 SDK 接管，旧 worldEngine 跳过');
   }
 
   // 定时任务（依赖 bobbyEngine 初始化完成）
-  startJobs(bobbyEngine, io, andyBridge);
+  startJobs(bobbyEngine, io, sdkAdapter);
 
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, () => {
