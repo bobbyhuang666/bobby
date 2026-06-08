@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" style="stop-color:#16162a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0a0a14;stop-opacity:1" />
+    </radialGradient>
+    <radialGradient id="warmGlow" cx="35%" cy="45%" r="35%">
+      <stop offset="0%" style="stop-color:#c8a97a;stop-opacity:0.15" />
+      <stop offset="100%" style="stop-color:#c8a97a;stop-opacity:0" />
+    </radialGradient>
+    <linearGradient id="lampLight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#c8a97a;stop-opacity:0.3" />
+      <stop offset="60%" style="stop-color:#c8a97a;stop-opacity:0.08" />
+      <stop offset="100%" style="stop-color:#c8a97a;stop-opacity:0" />
+    </linearGradient>
+    <linearGradient id="moonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e8d5b8;stop-opacity:0.7" />
+      <stop offset="100%" style="stop-color:#c8a97a;stop-opacity:0.4" />
+    </linearGradient>
+    <filter id="starGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="1"/>
+    </filter>
+    <clipPath id="circle">
+      <circle cx="100" cy="100" r="96"/>
+    </clipPath>
+  </defs>
+
+  <circle cx="100" cy="100" r="98" fill="url(#bg)"/>
+
+  <g clip-path="url(#circle)">
+    <circle cx="100" cy="100" r="80" fill="url(#warmGlow)"/>
+
+    <!-- 台灯光锥 -->
+    <path d="M58 32 L35 138 L78 138 Z" fill="url(#lampLight)" opacity="0.35"/>
+    <path d="M60 38 L42 135 L75 135 Z" fill="url(#lampLight)" opacity="0.15"/>
+
+    <!-- 弯月 -->
+    <circle cx="150" cy="45" r="14" fill="url(#moonGrad)"/>
+    <circle cx="157" cy="41" r="13" fill="#10101e"/>
+    <circle cx="150" cy="45" r="18" fill="none" stroke="rgba(200,169,122,0.06)" stroke-width="8" filter="url(#starGlow)"/>
+
+    <!-- 星星 -->
+    <circle cx="130" cy="28" r="1" fill="#e8d5b8" opacity="0.55" filter="url(#starGlow)"/>
+    <circle cx="170" cy="62" r="0.8" fill="#c8a97a" opacity="0.4" filter="url(#starGlow)"/>
+    <circle cx="112" cy="42" r="0.6" fill="#c8a97a" opacity="0.35" filter="url(#starGlow)"/>
+    <circle cx="162" cy="30" r="0.5" fill="#e8d5b8" opacity="0.3" filter="url(#starGlow)"/>
+    <circle cx="140" cy="68" r="0.4" fill="#c8a97a" opacity="0.25"/>
+    <circle cx="105" cy="22" r="0.7" fill="#e8d5b8" opacity="0.3" filter="url(#starGlow)"/>
+    <circle cx="178" cy="48" r="0.4" fill="#c8a97a" opacity="0.2"/>
+
+    <!-- 窗框 -->
+    <rect x="122" y="88" width="52" height="68" rx="2" stroke="rgba(100,100,140,0.15)" stroke-width="0.8" fill="none"/>
+    <line x1="148" y1="88" x2="148" y2="156" stroke="rgba(100,100,140,0.1)" stroke-width="0.5"/>
+    <line x1="122" y1="122" x2="174" y2="122" stroke="rgba(100,100,140,0.1)" stroke-width="0.5"/>
+    <rect x="122" y="88" width="52" height="34" rx="2" fill="rgba(16,16,30,0.3)"/>
+
+    <!-- 人物 -->
+    <g opacity="0.85">
+      <ellipse cx="75" cy="96" rx="14" ry="15" fill="#8a9ab5"/>
+      <path d="M61 90 Q64 78 75 76 Q86 78 89 90 Q86 84 75 82 Q64 84 61 90Z" fill="#6b7b95"/>
+      <path d="M58 112 Q60 103 70 99" stroke="#8a9ab5" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <path d="M92 112 Q90 103 80 99" stroke="#8a9ab5" stroke-width="5" fill="none" stroke-linecap="round"/>
+      <path d="M60 112 Q62 102 75 98 Q88 102 90 112 Q86 116 75 117 Q64 116 60 112Z" fill="#8a9ab5"/>
+      <path d="M54 130 Q56 120 63 116 Q75 114 87 116 Q94 120 96 130" stroke="#8a9ab5" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+      <path d="M68 115 Q75 118 82 115" stroke="#7a8aa5" stroke-width="1" fill="none" opacity="0.4"/>
+    </g>
+
+    <!-- 桌面 -->
+    <line x1="38" y1="133" x2="122" y2="133" stroke="rgba(100,100,140,0.2)" stroke-width="0.8"/>
+
+    <!-- 手机 -->
+    <rect x="88" y="126" width="10" height="7" rx="1.5" fill="rgba(40,40,65,0.5)"/>
+    <rect x="89.5" y="127.5" width="7" height="4" rx="0.5" fill="rgba(200,169,122,0.12)"/>
+
+    <!-- 杯子 -->
+    <ellipse cx="53" cy="131" rx="6" ry="1.8" fill="rgba(60,60,90,0.35)"/>
+    <rect x="47.5" y="126" width="11" height="5" rx="1.5" fill="rgba(60,60,90,0.25)"/>
+    <path d="M50 124 Q51 121 53 122.5" stroke="rgba(200,169,122,0.15)" stroke-width="0.5" fill="none"/>
+    <path d="M54 123 Q55 120 56.5 121.5" stroke="rgba(200,169,122,0.1)" stroke-width="0.4" fill="none"/>
+  </g>
+
+  <circle cx="100" cy="100" r="98" fill="none" stroke="rgba(200,169,122,0.12)" stroke-width="1"/>
+</svg>

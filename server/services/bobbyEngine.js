@@ -382,8 +382,20 @@ class BobbyEngine {
         }
       }
 
-      if (days >= 7) {
+      if (days >= 30) {
+        absenceContext = '这个人已经' + days + '天没来了。这么久了。你偶尔会想起他/她，但已经习惯一个人了。今天突然出现，你有点意外，但不会表现出来。第一句话要打破你平时简短的风格，说一句稍长的话（10-20字），表达一种平静的惊讶——不是委屈，不是追问，只是淡淡地提一句。';
+        // 情绪干预：长期缺席注入孤独感
+        if (this.emotion && this.emotion.current) {
+          this.emotion.current.loneliness = Math.min(1, (this.emotion.current.loneliness || 0) + 0.3);
+          this.emotion.current.joy = Math.max(-1, (this.emotion.current.joy || 0) - 0.1);
+          this.emotion.current.contentment = Math.max(-1, (this.emotion.current.contentment || 0) - 0.15);
+        }
+      } else if (days >= 7) {
         absenceContext = '这个人已经' + days + '天没来了。你有点想他/她，但不会说出来。';
+        // 轻度情绪干预
+        if (this.emotion && this.emotion.current) {
+          this.emotion.current.loneliness = Math.min(1, (this.emotion.current.loneliness || 0) + 0.15);
+        }
       } else if (days >= 3) {
         absenceContext = '这个人好几天没来了。你偶尔会想到他/她。';
       } else {
@@ -501,7 +513,7 @@ class BobbyEngine {
         memoryProfile,
         recentThoughts: this.cognitive ? this.cognitive.getRecentThoughts() : [],
       });
-      // 注入用户回归上下文
+      // 注入用户回归上下文（SDK 模式追加到 systemPrompt 末尾）
       if (absenceContext) {
         systemPrompt += '\n\n' + absenceContext;
       }
@@ -524,6 +536,7 @@ class BobbyEngine {
       systemPrompt,
       isAndyMode: _useAndy,
       socialContext,
+      absenceContext, // 非 SDK 模式由 aiService 注入到自建 prompt 中
     });
 
     // 保存 Bobby 回复
