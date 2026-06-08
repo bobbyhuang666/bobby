@@ -19,7 +19,7 @@ Bobby 想试试"让人想得更多"。
 <table>
 <tr>
 <td align="center"><img src="screenshots/01-onboarding.png" width="280"><br><sub>第一次见面 — "一个住在厦门的大学生"</sub></td>
-<td align="center"><img src="screenshots/03-chat-reply.png" width="280"><br><sub>深夜 — "没呢，躺着发呆。外面雨声好大。"</sub></td>
+<td align="center"><img src="screenshots/03-chat-reply.png" width="280"><br><sub>深夜 — "没，睡不着。外面还在下雨。"</sub></td>
 <td align="center"><img src="screenshots/04-chat-conversation.png" width="280"><br><sub>聊天 — 简短、真实、不刻意</sub></td>
 </tr>
 <tr>
