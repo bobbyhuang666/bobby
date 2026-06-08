@@ -1,15 +1,19 @@
 /**
- * Bobby 记忆服务
+ * Bobby 记忆服务 V3 — 向量语义检索
  *
  * 设计来源：
- * - Letta: Memory Blocks + Dream-time Compute + Agent 自主决定记什么忘什么
+ * - Letta: Memory Blocks + Dream-time Compute
  * - Mem0: Add-Learn-Retrieve 三步循环
+ * - Transformers.js: 本地 Embedding，零外部 API
  *
- * 核心理念：Bobby 不是数据库，它像真人一样——
- * 重要的事会记住，不重要的事会模糊，时间久了会忘记细节但留下感觉。
+ * V3 变更：
+ * - addMemory: 用向量余弦相似度做去重（替代正则前缀匹配）
+ * - retrieve: 用向量语义检索（替代关键词正则匹配）
+ * - Dream-time: 用向量空间聚类做记忆整合
  */
 
 const mongoose = require('mongoose');
+const EmbeddingService = require('./embeddingService');
 
 // 记忆块 schema
 const memoryBlockSchema = new mongoose.Schema({
@@ -25,14 +29,17 @@ const memoryBlockSchema = new mongoose.Schema({
   // 记忆内容
   content: { type: String, required: true },
 
-  // 情绪关联（记忆带有情绪色彩）
-  emotionTag: { type: String },  // 'warm', 'sad', 'funny', 'neutral'
+  // V3: 384 维语义向量
+  embedding: { type: [Number], required: false },
+
+  // 情绪关联
+  emotionTag: { type: String },
   emotionIntensity: { type: Number, default: 0.5, min: 0, max: 1 },
 
   // 记忆强度（会随时间衰减）
   strength: { type: Number, default: 1.0, min: 0, max: 1 },
 
-  // 访问计数（被想起的次数越多，越不容易忘记）
+  // 访问计数
   accessCount: { type: Number, default: 0 },
 
   // 最后被想起的时间
@@ -41,7 +48,7 @@ const memoryBlockSchema = new mongoose.Schema({
   // 来源
   source: { type: String, enum: ['conversation', 'gift', 'note', 'inference'], default: 'conversation' },
 
-  // 标签（用于检索）
+  // 标签
   tags: [String]
 }, { timestamps: true });
 
@@ -52,55 +59,86 @@ const MemoryBlock = mongoose.model('MemoryBlock', memoryBlockSchema);
 // ===== 记忆服务 =====
 class MemoryService {
 
-  // 添加记忆（Add）
+  /**
+   * 添加记忆（Add）— 向量语义去重
+   *
+   * 流程：
+   * 1. 将新内容向量化
+   * 2. 与同类型已有记忆做余弦相似度比对
+   * 3. 相似度 > 0.88 → 强化已有记忆（合并）
+   * 4. 否则 → 创建新记忆
+   */
   static async addMemory(userId, { type, content, emotionTag, source, tags }) {
-    // 检查是否已有相似记忆（避免重复）
-    // 策略：双向前缀匹配 + 显著前缀匹配
-    // - 显著前缀匹配：跳过"用户说："等前缀词，取有意义部分做前缀匹配
-    // - 双向匹配：新内容是旧内容的前缀 OR 旧内容是新内容的前缀
-    const significantContent = this._getSignificantPrefix(content, 16);
-    const escapedPrefix = this._escapeRegex(significantContent);
-
-    const existing = await MemoryBlock.findOne({
-      userId,
-      $or: [
-        // 策略1：显著前缀匹配（跳过常见前缀词后的核心内容）
-        { content: { $regex: `^${escapedPrefix}`, $options: 'i' } },
-        // 策略2：已存储内容是新内容的前缀（旧内容更短，新内容更具体）
-        // 例：已有"我住在厦门"，新增"我住在厦门集美" → 匹配
-        { content: { $regex: `^${this._escapeRegex(content)}.*`, $options: 'i' } },
-        // 策略3：新内容是已存储内容的前缀（新内容更短，旧内容更具体）
-        // 例：已有"我住在厦门集美"，新增"我住在厦门" → 匹配
-        { content: { $regex: `^${this._escapeRegex(content)}`, $options: 'i' } }
-      ]
-    });
-
-    if (existing) {
-      // 已有相似记忆，强化它
-      existing.strength = Math.min(1, existing.strength + 0.2);
-      existing.accessCount += 1;
-      existing.lastAccessed = new Date();
-      await existing.save();
-      return existing;
+    // 向量化新记忆
+    let newEmbedding;
+    try {
+      newEmbedding = await EmbeddingService.getEmbedding(content);
+    } catch (err) {
+      console.error('[Memory] 向量化失败，回退到创建:', err.message);
+      // 降级：无向量时直接创建，不做过滤
+      return MemoryBlock.create({
+        userId, type, content,
+        emotionTag: emotionTag || 'neutral',
+        emotionIntensity: 0.5,
+        strength: 1.0, accessCount: 1,
+        source: source || 'conversation',
+        tags: tags || []
+      });
     }
 
+    // 获取同类型已有记忆（预过滤，减少比对范围）
+    const sameType = await MemoryBlock.find({
+      userId, type,
+      embedding: { $exists: true, $ne: [] }
+    }).lean();
+
+    // 在内存中做极速向量比对
+    let bestMatch = null;
+    let highestScore = 0;
+
+    for (const mem of sameType) {
+      if (!mem.embedding || mem.embedding.length === 0) continue;
+      const score = EmbeddingService.cosineSimilarity(newEmbedding, mem.embedding);
+      if (score > highestScore) {
+        highestScore = score;
+        bestMatch = mem;
+      }
+    }
+
+    // 语义高度相似 → 合并/强化（阈值 0.88 代表语义几乎相同）
+    if (highestScore > 0.88 && bestMatch) {
+      // 如果新内容更长/更具体，用新内容覆盖
+      const useNewContent = content.length > bestMatch.content.length;
+      const updated = await MemoryBlock.findByIdAndUpdate(bestMatch._id, {
+        $set: {
+          lastAccessed: new Date(),
+          content: useNewContent ? content : bestMatch.content,
+          embedding: useNewContent ? newEmbedding : bestMatch.embedding,
+        },
+        $inc: { accessCount: 1 },
+        $min: { strength: 1 },
+      }, { new: true });
+
+      // strength 单独处理（$min + $inc 不能混用）
+      updated.strength = Math.min(1, updated.strength + 0.15);
+      await updated.save();
+      return updated;
+    }
+
+    // 无相似记忆 → 创建全新记忆
     return MemoryBlock.create({
-      userId,
-      type,
-      content,
+      userId, type, content,
       emotionTag: emotionTag || 'neutral',
       emotionIntensity: 0.5,
-      strength: 1.0,
-      accessCount: 1,
+      embedding: newEmbedding,
+      strength: 1.0, accessCount: 1,
       source: source || 'conversation',
       tags: tags || []
     });
   }
 
   // 学习：从对话中提取记忆（Learn）
-  // 只从用户消息中提取事实和偏好，避免 Bobby 自己的话被误记为用户信息
   static async learnFromConversation(userId, userText, bobbyReply) {
-    // 事实提取（仅从用户消息）
     const facts = this._extractFacts(userText);
     for (const fact of facts) {
       await this.addMemory(userId, {
@@ -111,7 +149,6 @@ class MemoryService {
       });
     }
 
-    // 情绪提取（用户的情绪状态）
     const emotion = this._extractEmotion(userText);
     if (emotion) {
       await this.addMemory(userId, {
@@ -123,7 +160,6 @@ class MemoryService {
       });
     }
 
-    // 偏好提取（仅从用户消息）
     const preferences = this._extractPreferences(userText);
     for (const pref of preferences) {
       await this.addMemory(userId, {
@@ -135,66 +171,111 @@ class MemoryService {
     }
   }
 
-  // 检索：找到相关的记忆（Retrieve）
+  /**
+   * 检索：语义向量检索（Retrieve）— V3 核心升级
+   *
+   * 流程：
+   * 1. 将查询文本向量化
+   * 2. 拉取用户所有记忆（单用户 < 5000 条，内存完全够）
+   * 3. 综合打分：语义相似度(70%) + 记忆强度(30%)
+   * 4. 返回 top-N
+   */
   static async retrieve(userId, context = '', limit = 5) {
-    // 先尝试基于关键词匹配
-    const keywords = this._extractKeywords(context);
-
-    let memories = [];
-
-    if (keywords.length > 0) {
-      const regex = keywords.map(k => this._escapeRegex(k)).join('|');
-      memories = await MemoryBlock.find({
-        userId,
-        content: { $regex: regex, $options: 'i' },
-        strength: { $gt: 0.1 }
-      })
+    if (!context.trim()) {
+      // 无上下文时返回强度最高的核心记忆
+      return MemoryBlock.find({ userId, strength: { $gt: 0.3 } })
         .sort({ strength: -1, accessCount: -1 })
         .limit(limit)
         .lean();
     }
 
-    // 如果关键词匹配不够，补充最近的强记忆
-    if (memories.length < limit) {
-      const existingIds = memories.map(m => m._id);
-      const additional = await MemoryBlock.find({
-        userId,
-        _id: { $nin: existingIds },
-        strength: { $gt: 0.3 }
-      })
-        .sort({ strength: -1, lastAccessed: -1 })
-        .limit(limit - memories.length)
-        .lean();
-      memories = memories.concat(additional);
+    // 查询向量化
+    let queryEmbedding;
+    try {
+      queryEmbedding = await EmbeddingService.getQueryEmbedding(context);
+    } catch (err) {
+      // 向量化失败，回退到关键词检索
+      console.error('[Memory] 查询向量化失败，回退关键词:', err.message);
+      return this._fallbackRetrieve(userId, context, limit);
+    }
+
+    // 拉取用户所有记忆（单用户量级，完全可内存操作）
+    const allMemories = await MemoryBlock.find({ userId }).lean();
+
+    if (allMemories.length === 0) return [];
+
+    // 综合打分
+    const scored = allMemories.map(mem => {
+      const hasEmbedding = mem.embedding && mem.embedding.length > 0;
+      const semanticScore = hasEmbedding
+        ? EmbeddingService.cosineSimilarity(queryEmbedding, mem.embedding)
+        : 0;
+
+      // 公式：语义相似度(70%) + 记忆强度(30%)
+      // Bobby 特色：强烈记忆（strength 高）即使语义不那么匹配，也有概率被想起
+      const finalScore = (semanticScore * 0.7) + (mem.strength * 0.3);
+
+      return { ...mem, semanticScore, finalScore };
+    });
+
+    // 过滤 + 排序
+    const results = scored
+      .filter(m => m.semanticScore > 0.35)
+      .sort((a, b) => b.finalScore - a.finalScore)
+      .slice(0, limit);
+
+    // 补充：如果语义检索不够，用强度最高的记忆补位
+    if (results.length < limit) {
+      const foundIds = new Set(results.map(m => m._id.toString()));
+      const additional = allMemories
+        .filter(m => !foundIds.has(m._id.toString()) && m.strength > 0.4)
+        .sort((a, b) => b.strength - a.strength)
+        .slice(0, limit - results.length);
+      results.push(...additional);
     }
 
     // 更新访问记录
-    if (memories.length > 0) {
+    if (results.length > 0) {
       await MemoryBlock.updateMany(
-        { _id: { $in: memories.map(m => m._id) } },
+        { _id: { $in: results.map(m => m._id) } },
         { $inc: { accessCount: 1 }, $set: { lastAccessed: new Date() } }
       );
     }
 
-    return memories;
+    return results;
   }
 
-  // Dream-time: 记忆衰减 + 整合（分批处理，避免内存溢出）
+  /**
+   * 关键词检索回退（Embedding 不可用时的保底方案）
+   * @private
+   */
+  static async _fallbackRetrieve(userId, context, limit) {
+    const keywords = this._extractKeywords(context);
+    if (keywords.length === 0) {
+      return MemoryBlock.find({ userId, strength: { $gt: 0.3 } })
+        .sort({ strength: -1 }).limit(limit).lean();
+    }
+
+    const regex = keywords.map(k => this._escapeRegex(k)).join('|');
+    return MemoryBlock.find({
+      userId,
+      content: { $regex: regex, $options: 'i' },
+      strength: { $gt: 0.1 }
+    }).sort({ strength: -1, accessCount: -1 }).limit(limit).lean();
+  }
+
+  /**
+   * Dream-time: 记忆衰减 + 向量聚类整合
+   */
   static async dreamTimeCompute(userId) {
     const now = Date.now();
     const BATCH_SIZE = 100;
 
-    // 1. 强度衰减：分批处理，避免全量加载到内存
+    // 1. 强度衰减（分批）
     let hasMore = true;
     while (hasMore) {
-      const batch = await MemoryBlock.find({ userId })
-        .limit(BATCH_SIZE)
-        .lean();
-
-      if (batch.length === 0) {
-        hasMore = false;
-        break;
-      }
+      const batch = await MemoryBlock.find({ userId }).limit(BATCH_SIZE).lean();
+      if (batch.length === 0) { hasMore = false; break; }
 
       const toDelete = [];
       const bulkOps = [];
@@ -205,93 +286,107 @@ class MemoryService {
         const decay = Math.exp(-decayRate * hoursSinceAccess);
 
         let newStrength = mem.strength * decay;
+        if (mem.accessCount > 3) newStrength = Math.max(0.2, newStrength);
 
-        // 被多次访问的记忆有"最低保障"
-        if (mem.accessCount > 3) {
-          newStrength = Math.max(0.2, newStrength);
-        }
-
-        // 强度太低的记忆删除（真正忘记了）
         if (newStrength < 0.05) {
           toDelete.push(mem._id);
         } else if (newStrength !== mem.strength) {
           bulkOps.push({
-            updateOne: {
-              filter: { _id: mem._id },
-              update: { $set: { strength: newStrength } }
-            }
+            updateOne: { filter: { _id: mem._id }, update: { $set: { strength: newStrength } } }
           });
         }
       }
 
-      // 批量执行
-      if (toDelete.length > 0) {
-        await MemoryBlock.deleteMany({ _id: { $in: toDelete } });
-      }
-      if (bulkOps.length > 0) {
-        await MemoryBlock.bulkWrite(bulkOps);
-      }
-
-      if (batch.length < BATCH_SIZE) {
-        hasMore = false;
-      }
+      if (toDelete.length > 0) await MemoryBlock.deleteMany({ _id: { $in: toDelete } });
+      if (bulkOps.length > 0) await MemoryBlock.bulkWrite(bulkOps);
+      if (batch.length < BATCH_SIZE) hasMore = false;
     }
 
-    // 2. 记忆整合：将相关的短期记忆合并为长期洞察
+    // 2. 向量聚类整合
     await this._consolidateMemories(userId);
   }
 
-  // 整合相关记忆为洞察（批量操作）
+  /**
+   * V3: 向量空间聚类整合
+   *
+   * 找到向量空间中距离近的情绪记忆簇，合并为洞察。
+   * 比旧版"同 tag 数量 > 3"的策略更智能——能发现跨 tag 的语义簇。
+   */
   static async _consolidateMemories(userId) {
-    // 找到同一类型、同一标签的多个记忆
     const emotionMemories = await MemoryBlock.find({
-      userId,
-      type: 'emotion',
-      strength: { $gt: 0.3 }
+      userId, type: 'emotion', strength: { $gt: 0.3 },
+      embedding: { $exists: true, $ne: [] }
     }).lean();
 
-    // 如果同一情绪标签的记忆超过3条，整合为一条洞察
-    const tagCounts = {};
-    emotionMemories.forEach(m => {
-      const tag = m.emotionTag || 'neutral';
-      if (!tagCounts[tag]) tagCounts[tag] = [];
-      tagCounts[tag].push(m);
-    });
+    if (emotionMemories.length < 3) return;
 
-    for (const [tag, mems] of Object.entries(tagCounts)) {
-      if (mems.length >= 3) {
-        // 检查是否已有类似洞察
-        const existing = await MemoryBlock.findOne({
-          userId,
-          type: 'insight',
-          emotionTag: tag
-        }).lean();
+    // 简单聚类：找相似度 > 0.75 的记忆对，组成簇
+    const clusters = [];
+    const assigned = new Set();
 
-        if (!existing) {
-          // 生成洞察
-          const insight = this._generateInsight(tag, mems);
-          await MemoryBlock.create({
-            userId,
-            type: 'insight',
-            content: insight,
-            emotionTag: tag,
-            emotionIntensity: 0.7,
-            strength: 0.8,
-            source: 'inference',
-            tags: ['insight', tag]
-          });
-        }
+    for (let i = 0; i < emotionMemories.length; i++) {
+      if (assigned.has(emotionMemories[i]._id.toString())) continue;
 
-        // 降低被整合的原始记忆强度（批量更新）
-        await MemoryBlock.updateMany(
-          { _id: { $in: mems.map(m => m._id) } },
-          { $mul: { strength: 0.7 } }
+      const cluster = [emotionMemories[i]];
+      assigned.add(emotionMemories[i]._id.toString());
+
+      for (let j = i + 1; j < emotionMemories.length; j++) {
+        if (assigned.has(emotionMemories[j]._id.toString())) continue;
+
+        const sim = EmbeddingService.cosineSimilarity(
+          emotionMemories[i].embedding,
+          emotionMemories[j].embedding
         );
+
+        if (sim > 0.75) {
+          cluster.push(emotionMemories[j]);
+          assigned.add(emotionMemories[j]._id.toString());
+        }
       }
+
+      if (cluster.length >= 3) clusters.push(cluster);
+    }
+
+    // 对每个簇生成洞察
+    for (const cluster of clusters) {
+      const dominantTag = this._getDominantTag(cluster);
+
+      // 检查是否已有同类洞察
+      const existing = await MemoryBlock.findOne({
+        userId, type: 'insight', emotionTag: dominantTag
+      }).lean();
+
+      if (!existing) {
+        const insight = this._generateInsight(dominantTag, cluster);
+        // 为洞察也生成向量
+        let insightEmbedding;
+        try {
+          insightEmbedding = await EmbeddingService.getEmbedding(insight);
+        } catch (e) { insightEmbedding = null; }
+
+        await MemoryBlock.create({
+          userId, type: 'insight', content: insight,
+          emotionTag: dominantTag, emotionIntensity: 0.7,
+          embedding: insightEmbedding,
+          strength: 0.8, source: 'inference',
+          tags: ['insight', dominantTag]
+        });
+      }
+
+      // 降低被整合的记忆强度
+      await MemoryBlock.updateMany(
+        { _id: { $in: cluster.map(m => m._id) } },
+        { $mul: { strength: 0.7 } }
+      );
     }
   }
 
-  // 生成洞察
+  static _getDominantTag(mems) {
+    const counts = {};
+    mems.forEach(m => { const t = m.emotionTag || 'neutral'; counts[t] = (counts[t] || 0) + 1; });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+  }
+
   static _generateInsight(tag, memories) {
     const insights = {
       sad: '这个人好像经常不开心。要多陪陪。',
@@ -304,35 +399,22 @@ class MemoryService {
     return insights[tag] || `关于这个人，有一些${tag}的记忆。`;
   }
 
-  // 获取用户画像（用于 prompt 注入）— 合并为单次查询
+  // 获取用户画像
   static async getUserProfile(userId) {
-    // 一次查询获取所有需要的记忆类型
     const memories = await MemoryBlock.find({
       userId,
       type: { $in: ['insight', 'preference', 'emotion'] },
       strength: { $gt: 0.3 }
-    })
-      .sort({ type: 1, lastAccessed: -1 })
-      .lean();
+    }).sort({ type: 1, lastAccessed: -1 }).lean();
 
     const insights = memories.filter(m => m.type === 'insight');
     const preferences = memories.filter(m => m.type === 'preference');
     const recentEmotions = memories.filter(m => m.type === 'emotion').slice(0, 3);
 
     let profile = '';
-
-    if (insights.length > 0) {
-      profile += `你对这个人的了解：${insights.map(i => i.content).join('；')}。`;
-    }
-
-    if (preferences.length > 0) {
-      profile += `对方喜欢：${preferences.map(p => p.content).join('、')}。`;
-    }
-
-    if (recentEmotions.length > 0) {
-      profile += `最近的情绪：${recentEmotions.map(e => e.content).join('；')}。`;
-    }
-
+    if (insights.length > 0) profile += `你对这个人的了解：${insights.map(i => i.content).join('；')}。`;
+    if (preferences.length > 0) profile += `对方喜欢：${preferences.map(p => p.content).join('、')}。`;
+    if (recentEmotions.length > 0) profile += `最近的情绪：${recentEmotions.map(e => e.content).join('；')}。`;
     return profile;
   }
 
@@ -340,33 +422,19 @@ class MemoryService {
 
   static _extractFacts(text) {
     const facts = [];
-    // 排除问句
     if (/[？?吗呢吧]$/.test(text.trim())) return facts;
-
-    // 简单的事实提取规则（只提取陈述句）
-    if (/我叫|我名字|我是.{2,}/.test(text) && !/是谁/.test(text)) {
-      facts.push(text.slice(0, 40));
-    }
-    if (/我住在|我家在/.test(text)) {
-      facts.push(text.slice(0, 40));
-    }
-    if (/我喜欢|我爱|我不喜欢|我讨厌/.test(text)) {
-      facts.push(text.slice(0, 40));
-    }
+    if (/我叫|我名字|我是.{2,}/.test(text) && !/是谁/.test(text)) facts.push(text.slice(0, 40));
+    if (/我住在|我家在/.test(text)) facts.push(text.slice(0, 40));
+    if (/我喜欢|我爱|我不喜欢|我讨厌/.test(text)) facts.push(text.slice(0, 40));
     return facts;
   }
 
   static _extractEmotion(text) {
-    // 问句不检测情绪
     const isQuestion = /[？?吗呢吧]$/.test(text.trim());
-
     if (/累|疲|辛苦/.test(text)) return { label: '疲惫', tag: 'tired' };
     if (/难过|伤心|哭/.test(text)) return { label: '难过', tag: 'sad' };
     if (/开心|高兴|哈哈/.test(text)) return { label: '开心', tag: 'warm' };
-    // "一个人"只有在非问句中才算孤独
-    if ((/孤独|寂寞/.test(text) || (/一个人/.test(text) && !isQuestion))) {
-      return { label: '孤独', tag: 'lonely' };
-    }
+    if ((/孤独|寂寞/.test(text) || (/一个人/.test(text) && !isQuestion))) return { label: '孤独', tag: 'lonely' };
     if (/生气|气死/.test(text)) return { label: '生气', tag: 'angry' };
     if (/谢谢|感谢/.test(text)) return { label: '感激', tag: 'warm' };
     return null;
@@ -382,31 +450,11 @@ class MemoryService {
   }
 
   static _extractKeywords(text) {
-    // 去掉常见停用词，提取关键词
-    return text
-      .replace(/[，。！？、；：""''（）\s]+/g, ' ')
-      .split(' ')
-      .filter(w => w.length >= 2)
-      .slice(0, 5);
+    return text.replace(/[，。！？、；：""''（）\s]+/g, ' ').split(' ').filter(w => w.length >= 2).slice(0, 5);
   }
 
   static _escapeRegex(str) {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  /**
-   * 提取内容的显著前缀（跳过常见前缀词如"用户说："、"对方"等）
-   * @param {string} content - 原始内容
-   * @param {number} minLength - 最小返回长度（字符数）
-   * @returns {string} 显著前缀
-   */
-  static _getSignificantPrefix(content, minLength = 12) {
-    // 去掉常见记忆前缀词，提取有意义的部分
-    const stripped = content.replace(/^(用户说：|对方|这个人)/, '');
-    // 取显著部分的前 minLength 个字符，但至少保留原内容前 minLength 个字符
-    const prefix = stripped.length >= minLength ? stripped.slice(0, minLength) : content.slice(0, minLength);
-    // 限制正则输入长度，防止 ReDoS
-    return prefix.slice(0, 50);
   }
 }
 

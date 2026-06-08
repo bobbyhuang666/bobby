@@ -239,6 +239,12 @@ async function start() {
   await BobbyMemoryService.init();
   console.log('Bobby 记忆库已初始化');
 
+  // 预热本地 Embedding 模型（异步，不阻塞启动）
+  const EmbeddingService = require('./services/embeddingService');
+  EmbeddingService.init().catch(err => {
+    console.error('Embedding 模型加载失败（记忆系统将回退到关键词检索）:', err.message);
+  });
+
   // SDK 适配层（Character SDK 驱动的多智能体世界模拟）
   let sdkAdapter = null;
   try {

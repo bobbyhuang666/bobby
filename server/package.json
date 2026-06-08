@@ -14,6 +14,7 @@
     "test:ci": "jest --ci --reporters=default --reporters=jest-junit"
   },
   "dependencies": {
+    "@xenova/transformers": "^2.17.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
@@ -22,6 +23,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.0",
     "node-cron": "^3.0.3",
+    "sharp": "^0.34.5",
     "socket.io": "^4.7.2"
   },
   "devDependencies": {
