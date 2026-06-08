@@ -307,78 +307,157 @@ class MemoryService {
   }
 
   /**
-   * V3: 向量空间聚类整合
+   * V3: 向量聚类整合 — Bobby 的"梦境整合"
    *
-   * 找到向量空间中距离近的情绪记忆簇，合并为洞察。
-   * 比旧版"同 tag 数量 > 3"的策略更智能——能发现跨 tag 的语义簇。
+   * 每天凌晨 4 点由 Dream-time 调用。
+   * 用向量空间中的距离自动发现语义相近的记忆簇，
+   * 然后用 LLM 生成深度洞察，替代旧版的固定模板。
+   *
+   * 算法：Single-Linkage 层次聚类（贪心扩展）
+   * - 不需要预设 K 值
+   * - 时间复杂度 O(n²)，但单用户记忆量 < 5000，完全没问题
    */
   static async _consolidateMemories(userId) {
-    const emotionMemories = await MemoryBlock.find({
-      userId, type: 'emotion', strength: { $gt: 0.3 },
+    // 取所有有向量的记忆（不限类型：fact、emotion、preference、event 都参与聚类）
+    const memories = await MemoryBlock.find({
+      userId,
+      strength: { $gt: 0.3 },
       embedding: { $exists: true, $ne: [] }
     }).lean();
 
-    if (emotionMemories.length < 3) return;
+    if (memories.length < 3) return;
 
-    // 简单聚类：找相似度 > 0.75 的记忆对，组成簇
+    // ===== 1. 向量聚类 =====
+    const CLUSTER_THRESHOLD = 0.65; // 余弦相似度阈值（0.65 = "主题相近"）
+    const MIN_CLUSTER_SIZE = 2;     // 最小簇大小
+
+    const clusters = this._clusterByEmbedding(memories, CLUSTER_THRESHOLD, MIN_CLUSTER_SIZE);
+
+    if (clusters.length === 0) return;
+
+    const aiService = require('./aiService');
+
+    // ===== 2. 对每个簇生成 LLM 洞察 =====
+    for (const cluster of clusters) {
+      // 检查是否已有语义相似的洞察（避免重复生成）
+      const clusterTexts = cluster.map(m => m.content);
+      const dominantTag = this._getDominantTag(cluster);
+
+      // 用簇的"中心向量"做去重检查
+      const centroid = this._computeCentroid(cluster.map(m => m.embedding));
+      const existingInsights = await MemoryBlock.find({
+        userId, type: 'insight',
+        embedding: { $exists: true, $ne: [] }
+      }).lean();
+
+      const hasSimilarInsight = existingInsights.some(ins => {
+        if (!ins.embedding || ins.embedding.length === 0) return false;
+        return EmbeddingService.cosineSimilarity(centroid, ins.embedding) > 0.8;
+      });
+
+      if (hasSimilarInsight) continue; // 已有类似洞察，跳过
+
+      // 调用 LLM 生成深度洞察
+      const insightText = await aiService.generateClusterInsight(clusterTexts, dominantTag);
+
+      if (!insightText) continue;
+
+      // 为洞察生成向量（供未来去重和检索）
+      let insightEmbedding;
+      try {
+        insightEmbedding = await EmbeddingService.getEmbedding(insightText);
+      } catch (e) { insightEmbedding = null; }
+
+      await MemoryBlock.create({
+        userId,
+        type: 'insight',
+        content: insightText,
+        emotionTag: dominantTag,
+        emotionIntensity: 0.7,
+        embedding: insightEmbedding,
+        strength: 0.9, // 洞察强度高，不容易衰减
+        source: 'inference',
+        tags: ['insight', dominantTag, 'dream-time']
+      });
+
+      // 降低被整合记忆的强度（但不删除，只是"沉淀"）
+      await MemoryBlock.updateMany(
+        { _id: { $in: cluster.map(m => m._id) } },
+        { $mul: { strength: 0.75 } }
+      );
+
+      console.log(`[Dream-time] 用户 ${userId}: "${insightText}" (${cluster.length} 条记忆整合)`);
+    }
+  }
+
+  /**
+   * Single-Linkage 层次聚类
+   *
+   * 算法：贪心扩展法
+   * 1. 取未分配的记忆中强度最高的，作为新簇的"种子"
+   * 2. 找出与种子相似度 > threshold 的所有记忆，加入簇
+   * 3. 重复直到没有更多记忆可以归入
+   * 4. 如果簇大小 >= minSize，保留；否则丢弃
+   * 5. 回到步骤 1
+   *
+   * @param {Array} memories - 带 embedding 的记忆文档
+   * @param {number} threshold - 余弦相似度阈值
+   * @param {number} minSize - 最小簇大小
+   * @returns {Array<Array>} 聚类结果
+   * @private
+   */
+  static _clusterByEmbedding(memories, threshold = 0.65, minSize = 2) {
     const clusters = [];
     const assigned = new Set();
 
-    for (let i = 0; i < emotionMemories.length; i++) {
-      if (assigned.has(emotionMemories[i]._id.toString())) continue;
+    // 按强度排序，优先让强记忆做种子
+    const sorted = [...memories].sort((a, b) => b.strength - a.strength);
 
-      const cluster = [emotionMemories[i]];
-      assigned.add(emotionMemories[i]._id.toString());
+    for (const seed of sorted) {
+      if (assigned.has(seed._id.toString())) continue;
 
-      for (let j = i + 1; j < emotionMemories.length; j++) {
-        if (assigned.has(emotionMemories[j]._id.toString())) continue;
+      const cluster = [seed];
+      assigned.add(seed._id.toString());
 
-        const sim = EmbeddingService.cosineSimilarity(
-          emotionMemories[i].embedding,
-          emotionMemories[j].embedding
-        );
+      // 贪心扩展：找与种子相似的记忆
+      for (const candidate of sorted) {
+        if (assigned.has(candidate._id.toString())) continue;
 
-        if (sim > 0.75) {
-          cluster.push(emotionMemories[j]);
-          assigned.add(emotionMemories[j]._id.toString());
+        const sim = EmbeddingService.cosineSimilarity(seed.embedding, candidate.embedding);
+        if (sim >= threshold) {
+          cluster.push(candidate);
+          assigned.add(candidate._id.toString());
         }
       }
 
-      if (cluster.length >= 3) clusters.push(cluster);
-    }
-
-    // 对每个簇生成洞察
-    for (const cluster of clusters) {
-      const dominantTag = this._getDominantTag(cluster);
-
-      // 检查是否已有同类洞察
-      const existing = await MemoryBlock.findOne({
-        userId, type: 'insight', emotionTag: dominantTag
-      }).lean();
-
-      if (!existing) {
-        const insight = this._generateInsight(dominantTag, cluster);
-        // 为洞察也生成向量
-        let insightEmbedding;
-        try {
-          insightEmbedding = await EmbeddingService.getEmbedding(insight);
-        } catch (e) { insightEmbedding = null; }
-
-        await MemoryBlock.create({
-          userId, type: 'insight', content: insight,
-          emotionTag: dominantTag, emotionIntensity: 0.7,
-          embedding: insightEmbedding,
-          strength: 0.8, source: 'inference',
-          tags: ['insight', dominantTag]
-        });
+      if (cluster.length >= minSize) {
+        clusters.push(cluster);
       }
-
-      // 降低被整合的记忆强度
-      await MemoryBlock.updateMany(
-        { _id: { $in: cluster.map(m => m._id) } },
-        { $mul: { strength: 0.7 } }
-      );
     }
+
+    return clusters;
+  }
+
+  /**
+   * 计算簇的中心向量（各维度均值）
+   * @private
+   */
+  static _computeCentroid(embeddings) {
+    if (!embeddings || embeddings.length === 0) return [];
+    const dim = embeddings[0].length;
+    const centroid = new Array(dim).fill(0);
+
+    for (const vec of embeddings) {
+      for (let i = 0; i < dim; i++) {
+        centroid[i] += vec[i];
+      }
+    }
+
+    for (let i = 0; i < dim; i++) {
+      centroid[i] /= embeddings.length;
+    }
+
+    return centroid;
   }
 
   static _getDominantTag(mems) {

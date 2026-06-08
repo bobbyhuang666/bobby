@@ -472,4 +472,57 @@ ${context}
   }
 }
 
-module.exports = { generateReply, generateCommentReply, generateReflection, generateInnerThought, generateEmotionNote, callDeepSeek };
+// ===== V3: 向量聚类洞察生成 =====
+
+/**
+ * 根据一组语义相近的记忆，生成一条深度洞察
+ *
+ * 与旧版 _generateInsight（固定模板）不同，这里用 LLM 生成自然语言洞察。
+ * Bobby 会在深夜的 Dream-time 整合中调用此函数。
+ *
+ * @param {string[]} memories - 簇内记忆的内容列表
+ * @param {string} [dominantTag] - 簇内最多的情绪标签
+ * @returns {Promise<string|null>} 洞察文本，如 "这个人最近压力很大，不仅是因为快毕业了，兼职也不太顺利。"
+ */
+async function generateClusterInsight(memories, dominantTag) {
+  if (!memories || memories.length === 0) return null;
+
+  const memoryText = memories.map((m, i) => `${i + 1}. ${m}`).join('\n');
+
+  const messages = [
+    {
+      role: 'system',
+      content: `你是 Bobby 的内心记忆系统。你在深夜整理自己对一个人的记忆。
+
+以下是这个人最近相关的记忆碎片：
+${memoryText}
+
+任务：用 Bobby 的视角，用一句简短的话总结你对这个人的理解。
+要求：
+- 10-25 个字，一句话
+- 像一个人在心里默默记住的感觉
+- 不要重复记忆原文，要提炼出更高层的理解
+- 用中文
+- 如果记忆之间有因果或关联，要体现出来
+- 语气要像 Bobby：安静、内敛、有点笨拙但真诚
+
+例子：
+- "这个人最近压力很大，学习和兼职都不太顺利。"
+- "他好像很在意别人的看法，但又不好意思说。"
+- "这个人总是很累，但还在撑着。"
+- "他好像在找一个能理解自己的人。"
+
+输出洞察文本，不要加任何解释。`
+    }
+  ];
+
+  try {
+    const insight = await callDeepSeek(messages, { maxTokens: 50, temperature: 0.7 });
+    return insight && insight.length > 5 ? insight : null;
+  } catch (err) {
+    console.error('[Dream-time] 聚类洞察生成失败:', err.message);
+    return null;
+  }
+}
+
+module.exports = { generateReply, generateCommentReply, generateReflection, generateInnerThought, generateEmotionNote, generateClusterInsight, callDeepSeek };
