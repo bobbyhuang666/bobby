@@ -6,7 +6,73 @@ const { BobbyMemoryService } = require('./bobbyMemory');
 const { WorldEngine } = require('./worldEngine');
 const { IntimacySystem } = require('../modules/intimacy');
 
+// ═══ 本地智能回复（无 API Key 时使用）═══
+const LOCAL_REPLIES = {
+  greeting: {
+    day: ['嗯', '来了', '在', '嗯嗯', '在呢'],
+    night: ['嗯？', '还没睡？', '在', '嗯，我在', '来了啊'],
+  },
+  howAreYou: {
+    day: ['还行', '嗯，还好', '就那样', '有点困'],
+    night: ['睡不着', '嗯...困了', '在发呆', '还好'],
+  },
+  tired: {
+    day: ['辛苦了', '早点休息', '嗯...累了就歇会', '嗯'],
+    night: ['早点睡', '别太拼了', '嗯...累就睡吧', '嗯，早点休息'],
+  },
+  sad: {
+    day: ['嗯...', '怎么了', '还好吗', '...在'],
+    night: ['...在吗', '嗯，我在', '你怎么了', '嗯...'],
+  },
+  weather: {
+    day: ['嗯', '热', '还好吧', '今天天气还行'],
+    night: ['嗯，外面好像...不太热', '还好', '嗯'],
+  },
+  doing: {
+    day: ['在发呆', '在看书', '嗯，在上课', '在图书馆'],
+    night: ['在发呆', '看手机', '嗯，在听歌', '在看窗外'],
+  },
+  goodNight: {
+    night: ['嗯，晚安', '早点睡', '嗯', '晚安'],
+  },
+  thanks: {
+    day: ['嗯', '没事', '嗯嗯'],
+    night: ['嗯', '嗯嗯'],
+  },
+  default: {
+    day: ['嗯', '在', '嗯嗯', '还行', '好'],
+    night: ['嗯', '...在', '嗯嗯', '困了', '在发呆'],
+  },
+};
+
+function getLocalReply(userText, bobbyStatus, hour) {
+  const isNight = hour >= 23 || hour < 3;
+  const period = isNight ? 'night' : 'day';
+  const t = userText.toLowerCase();
+
+  let pool;
+  if (/你好|hi|hello|嗨|早|在吗/.test(t)) pool = LOCAL_REPLIES.greeting[period];
+  else if (/怎么样|还好吗|还好/.test(t)) pool = LOCAL_REPLIES.howAreYou[period];
+  else if (/累|疲|辛苦|好烦|不想/.test(t)) pool = LOCAL_REPLIES.tired[period];
+  else if (/难过|伤心|烦|丧|哭|孤独/.test(t)) pool = LOCAL_REPLIES.sad[period];
+  else if (/天气|下雨|热|冷|风/.test(t)) pool = LOCAL_REPLIES.weather[period];
+  else if (/在干嘛|干什么|在做什么/.test(t)) pool = LOCAL_REPLIES.doing[period];
+  else if (/晚安|睡了|拜拜|再见/.test(t)) pool = LOCAL_REPLIES.goodNight[period];
+  else if (/谢谢|感谢|多谢/.test(t)) pool = LOCAL_REPLIES.thanks[period];
+  else pool = LOCAL_REPLIES.default[period];
+
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// ═══ API 调用 ═══
 async function callDeepSeek(messages, options = {}) {
+  // 如果 API Key 无效，使用本地智能回复
+  if (!API_KEY || API_KEY === 'sk-test' || API_KEY.startsWith('your_')) {
+    const userText = messages.filter(m => m.role === 'user').pop()?.content || '';
+    const hour = new Date().getHours();
+    return getLocalReply(userText, '', hour);
+  }
+
   const response = await fetch(API_URL, {
     method: 'POST',
     headers: {

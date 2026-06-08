@@ -213,11 +213,18 @@ app.get('/api/shared-world', async (req, res) => {
       .slice(-5)
       .map(e => ({ friendName: e.friendName, content: e.content, time: e.time }));
 
-    // V2: NPC 自主行为（从世界事件流中提取 npc_autonomous 类型）
-    const npcEvents = (state?.worldEvents || [])
-      .filter(e => e.type === 'npc_autonomous')
-      .slice(-5)
-      .map(e => ({ content: e.content, time: e.time }));
+    // V2: NPC 自主行为（从世界事件流中提取 npc_autonomous 类型，按内容去重）
+    const npcEvents = [];
+    const seenContent = new Set();
+    const allNpcEvents = (state?.worldEvents || [])
+      .filter(e => e.type === 'npc_autonomous');
+    for (let i = allNpcEvents.length - 1; i >= 0 && npcEvents.length < 5; i--) {
+      const e = allNpcEvents[i];
+      if (!seenContent.has(e.content)) {
+        seenContent.add(e.content);
+        npcEvents.unshift({ content: e.content, time: e.time });
+      }
+    }
 
     res.json({
       weather: weather || { temp: '?', description: '未知' },

@@ -2104,7 +2104,16 @@ function renderSharedWorld(data) {
   if (npcEventsEl && data.npcEvents && data.npcEvents.length > 0) {
     if (npcDivider) npcDivider.style.display = '';
     if (npcLabel) npcLabel.style.display = '';
-    npcEventsEl.innerHTML = data.npcEvents.slice(-4).map(e =>
+    // 前端兜底去重：按内容过滤重复
+    const uniqueNpcEvents = [];
+    const seenNpcContent = new Set();
+    for (const e of data.npcEvents) {
+      if (!seenNpcContent.has(e.content)) {
+        seenNpcContent.add(e.content);
+        uniqueNpcEvents.push(e);
+      }
+    }
+    npcEventsEl.innerHTML = uniqueNpcEvents.slice(-4).map(e =>
       '<div class="sw-npc-event">· ' + escapeHtml(e.content) + '</div>'
     ).join('');
   } else {
