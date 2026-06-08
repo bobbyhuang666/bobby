@@ -271,10 +271,14 @@ class MemoryService {
     const now = Date.now();
     const BATCH_SIZE = 100;
 
-    // 1. 强度衰减（分批）
+    // 1. 强度衰减（分批，用 processed 集合跳过已处理的文档）
     let hasMore = true;
+    const processed = new Set();
     while (hasMore) {
-      const batch = await MemoryBlock.find({ userId }).limit(BATCH_SIZE).lean();
+      const batch = await MemoryBlock.find({
+        userId,
+        _id: { $nin: Array.from(processed) }
+      }).limit(BATCH_SIZE).lean();
       if (batch.length === 0) { hasMore = false; break; }
 
       const toDelete = [];
@@ -299,6 +303,7 @@ class MemoryService {
 
       if (toDelete.length > 0) await MemoryBlock.deleteMany({ _id: { $in: toDelete } });
       if (bulkOps.length > 0) await MemoryBlock.bulkWrite(bulkOps);
+      batch.forEach(m => processed.add(m._id.toString()));
       if (batch.length < BATCH_SIZE) hasMore = false;
     }
 

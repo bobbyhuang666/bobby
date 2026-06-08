@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const { IntimacySystem } = require('../modules/intimacy');
+// 延迟导入，避免 Mongoose Model 与业务模块的循环依赖风险
+let _intimacySystem = null;
+function getIntimacySystem() {
+  if (!_intimacySystem) _intimacySystem = require('../modules/intimacy').IntimacySystem;
+  return _intimacySystem;
+}
 
 const userSchema = new mongoose.Schema({
   // 基本信息
@@ -52,14 +57,14 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-// 获取好感度等级（委托 IntimacySystem）
+// 获取好感度等级（委托 IntimacySystem，延迟加载避免循环依赖）
 userSchema.methods.getIntimacyLevel = function() {
-  return IntimacySystem.getLevel(this.intimacy);
+  return getIntimacySystem().getLevel(this.intimacy);
 };
 
 // 增加好感度（委托 IntimacySystem）
 userSchema.methods.addIntimacy = function(points) {
-  const result = IntimacySystem.addPoints(this.intimacy, points);
+  const result = getIntimacySystem().addPoints(this.intimacy, points);
   this.intimacy = result.newValue;
   return result.upgraded;
 };

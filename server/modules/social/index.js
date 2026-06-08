@@ -125,7 +125,7 @@ const EVENT_TYPES = {
 class SocialEngine {
   constructor() {
     this.friends = FRIENDS;
-    this.recentEvents = [];       // 最近的社交事件（防重复）
+    this.recentEvents = [];       // 最近的社交事件 [{ key, content }] — key 用于去重，content 用于上下文
     this.maxRecentEvents = 20;
   }
 
@@ -178,7 +178,7 @@ class SocialEngine {
   getSocialContext() {
     if (this.recentEvents.length === 0) return null;
 
-    const recent = this.recentEvents.slice(-5);
+    const recent = this.recentEvents.slice(-5).map(e => e.content);
     return `最近的社交动态：${recent.join('；')}`;
   }
 
@@ -295,19 +295,6 @@ class SocialEngine {
   }
 
   /**
-   * 按亲密度加权选择朋友（温暖/亲密事件用）
-   */
-  _pickFriendWeighted() {
-    const total = this.friends.reduce((sum, f) => sum + f.closeness, 0);
-    let r = Math.random() * total;
-    for (const f of this.friends) {
-      r -= f.closeness;
-      if (r <= 0) return f;
-    }
-    return this.friends[this.friends.length - 1];
-  }
-
-  /**
    * 随机选择一个朋友
    */
   _pickFriend() {
@@ -410,11 +397,11 @@ class SocialEngine {
 
     if (!event) return null;
 
-    // 去重
+    // 去重（同时存储 key 和 content）
     const key = `${event.friendId}_${event.type}_${event.content.slice(0, 10)}`;
-    if (this.recentEvents.includes(key)) return null;
+    if (this.recentEvents.some(e => e.key === key)) return null;
 
-    this.recentEvents.push(key);
+    this.recentEvents.push({ key, content: event.content });
     if (this.recentEvents.length > this.maxRecentEvents) {
       this.recentEvents.shift();
     }

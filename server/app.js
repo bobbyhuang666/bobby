@@ -38,6 +38,10 @@ const io = new Server(server, {
 });
 
 // ===== 中间件 =====
+// 反向代理支持（Nginx/Cloudflare 等），确保 rate-limit 正确识别客户端 IP
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
     ? process.env.ALLOWED_ORIGIN || 'https://yourdomain.com'
@@ -117,11 +121,13 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     if (socket.userId) {
-      const count = userConnectionCount.get(socket.userId) || 1;
-      if (count <= 1) {
+      // 原子计算：直接数剩余连接，避免并发断开时计数丢失
+      const remaining = [...io.sockets.sockets.values()]
+        .filter(s => s.userId === socket.userId && s.id !== socket.id).length;
+      if (remaining === 0) {
         userConnectionCount.delete(socket.userId);
       } else {
-        userConnectionCount.set(socket.userId, count - 1);
+        userConnectionCount.set(socket.userId, remaining);
       }
     }
     if (authResetTimer) {

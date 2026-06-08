@@ -166,7 +166,7 @@ function startJobs(bobbyEngine, io, sdkAdapter) {
       }
 
       // 策略 1：上下文感知碎片（Bobby 此刻的真实感受）
-      if (Math.random() < 0.20) {
+      if (!noteText && Math.random() < 0.20) {
         noteText = NoteSystem.composeContextualNote({
           status: state.currentStatus,
           weatherContext: weatherCtx,

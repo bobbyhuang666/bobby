@@ -221,13 +221,15 @@ class BobbyMemoryService {
         { owner: 'bobby', 'memories.category': category },
         {
           $set: { 'memories.$.items.$[item].lastMentioned': new Date() },
-          $inc: { 'memories.$.items.$[item].strength': 0.05 }
+          $min: { 'memories.$.items.$[item].strength': 1.0 },  // 先设上限
+          $inc: { 'memories.$.items.$[item].strength': 0.05 }   // 再加分
         },
         {
           arrayFilters: [{ 'item.content': content }],
           upsert: false
         }
       );
+      // $min 和 $inc 同时使用时，$inc 先执行再 $min 裁剪，等效于 Math.min(1, strength + 0.05)
     } catch (e) {
       // 静默失败
     }

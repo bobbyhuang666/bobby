@@ -63,18 +63,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 静态资源：Cache First
+  // 静态资源：Stale-While-Revalidate（立即返回缓存，后台更新缓存）
+  // 避免部署后旧 JS/CSS 不更新的问题
   if (request.destination === 'style' || request.destination === 'script' ||
       request.destination === 'image' || request.destination === 'font' ||
       request.destination === 'manifest') {
     event.respondWith(
       caches.match(request).then((cached) => {
-        if (cached) return cached;
-        return fetch(request).then((response) => {
+        const fetchPromise = fetch(request).then((response) => {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
           return response;
-        });
+        }).catch(() => cached); // 网络失败时降级到缓存
+
+        return cached || fetchPromise;
       })
     );
     return;

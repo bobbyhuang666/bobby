@@ -46,18 +46,18 @@ router.get('/', optionalAuth, async (req, res) => {
 // 点赞/取消点赞
 router.post('/:id/like', authMiddleware, validateObjectId('id'), async (req, res) => {
   try {
-    const note = await Note.findById(req.params.id);
-    if (!note) return res.status(404).json({ error: '动态不存在' });
+    // 原子操作：如果未点赞则点赞（$addToSet 防重复），返回更新后的文档
+    const toggled = await Note.findOneAndUpdate(
+      { _id: req.params.id, likedBy: { $ne: req.userId } },
+      { $addToSet: { likedBy: req.userId }, $inc: { likes: 1 } },
+      { new: true }
+    );
 
-    const userIdStr = req.userId.toString();
-    const isLiked = note.likedBy.some(id => id.toString() === userIdStr);
+    let isLiked;
 
-    if (isLiked) {
-      note.likedBy.pull(req.userId);
-      note.likes = Math.max(0, note.likes - 1);
-    } else {
-      note.likedBy.push(req.userId);
-      note.likes += 1;
+    if (toggled) {
+      // 刚刚点赞成功
+      isLiked = true;
 
       // 点赞加好感度
       const user = await User.findById(req.userId);
@@ -66,20 +66,25 @@ router.post('/:id/like', authMiddleware, validateObjectId('id'), async (req, res
         await user.save();
       }
 
-      // Bobby 感受到被关注 → 情绪微调（温暖感 +1）
+      // Bobby 感受到被关注 → 情绪微调
       try {
         const bobbyEngine = req.app.get('bobbyEngine');
         if (bobbyEngine && bobbyEngine.emotion) {
           bobbyEngine.emotion.tick('有人给我点赞了', 0);
         }
-      } catch (e) {
-        // 情绪反馈失败不影响点赞
-      }
+      } catch (e) {}
+    } else {
+      // 已点赞，执行取消点赞（原子 $pull）
+      await Note.updateOne(
+        { _id: req.params.id },
+        { $pull: { likedBy: req.userId }, $max: { likes: 0 }, $inc: { likes: -1 } }
+      );
+      isLiked = false;
     }
 
-    await note.save();
+    const note = await Note.findById(req.params.id).select('likes likedBy').lean();
 
-    res.json({ likes: note.likes, isLiked: !isLiked });
+    res.json({ likes: Math.max(0, note.likes || 0), isLiked });
   } catch (err) {
     res.status(500).json({ error: '点赞失败' });
   }

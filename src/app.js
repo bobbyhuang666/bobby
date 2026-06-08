@@ -1740,7 +1740,7 @@ function loadNotes() {
 
   DATA.notes.forEach(note => {
     if (note.time !== lastTime) {
-      html += `<div class="timeline-date">${note.time}</div>`;
+      html += `<div class="timeline-date">${escapeHtml(note.time)}</div>`;
       lastTime = note.time;
     }
     const timeIcon = getTimeIcon(note.timeDetail);
@@ -1751,22 +1751,22 @@ function loadNotes() {
       <div class="timeline-card" style="--stagger: ${staggerDelay}ms">
         <div class="note-time-badge">
           <span class="note-time-icon">${timeIcon}</span>
-          <span class="note-time-text">${note.timeDetail}</span>
+          <span class="note-time-text">${escapeHtml(note.timeDetail)}</span>
         </div>
         <div class="note-text">${escapeHtml(note.text)}</div>
         <div class="note-meta">
-          <span class="note-time">${note.time}</span>
-          <button class="note-like ${note.liked ? 'liked' : ''}" onclick="toggleLike('${note.id}')">
+          <span class="note-time">${escapeHtml(note.time)}</span>
+          <button class="note-like ${note.liked ? 'liked' : ''}" onclick="toggleLike('${escapeHtml(note.id)}')">
             ${note.liked ? '❤️' : '♡'} ${note.likes || ''}
           </button>
         </div>
-        <div class="note-comment-section" id="commentSection-${note.id}">
-          <div class="comment-list" id="commentList-${note.id}">
+        <div class="note-comment-section" id="commentSection-${escapeHtml(note.id)}">
+          <div class="comment-list" id="commentList-${escapeHtml(note.id)}">
             ${renderComments(note)}
           </div>
           <div class="comment-input-wrap">
-            <input type="text" class="comment-input" id="commentInput-${note.id}" placeholder="说点什么..." onkeydown="if(event.key==='Enter')submitComment('${note.id}')">
-            <button class="comment-send-btn" id="commentBtn-${note.id}" disabled onclick="submitComment('${note.id}')">
+            <input type="text" class="comment-input" id="commentInput-${escapeHtml(note.id)}" placeholder="说点什么..." onkeydown="if(event.key==='Enter')submitComment('${escapeHtml(note.id)}')">
+            <button class="comment-send-btn" id="commentBtn-${escapeHtml(note.id)}" disabled onclick="submitComment('${escapeHtml(note.id)}')">
               <svg width="16" height="16" viewBox="0 0 20 20" fill="none"><path d="M3 10L17 3L10 17L9 11L3 10Z" fill="currentColor"/></svg>
             </button>
           </div>
@@ -1985,7 +1985,7 @@ function loadProfileNotes() {
       <div class="note-card">
         <div class="note-text">${escapeHtml(note.text)}</div>
         <div class="note-meta">
-          <span class="note-time">${timeIcon} ${note.time} ${note.timeDetail}</span>
+          <span class="note-time">${timeIcon} ${escapeHtml(note.time)} ${escapeHtml(note.timeDetail)}</span>
           ${note.comments && note.comments.length > 0 ? `<span class="note-comment-count">💬 ${note.comments.length}</span>` : ''}
         </div>
       </div>
@@ -2443,7 +2443,7 @@ function showRelationshipCard() {
       stories.push('我们的故事才刚刚开始。');
     }
 
-    storyEl.innerHTML = stories.map(s => `<p>${s}</p>`).join('');
+    storyEl.innerHTML = stories.map(s => `<p>${escapeHtml(s)}</p>`).join('');
   }
 
   panel.classList.add('show');

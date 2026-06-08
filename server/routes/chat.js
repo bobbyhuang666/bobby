@@ -141,7 +141,11 @@ router.post('/comment-reply', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: '评论太长了' });
     }
 
-    // ===== 第1层：输入过滤 =====
+    // ===== 第1层：输入过滤（noteText + userComment 都需要） =====
+    const sanitizedNote = sanitizeInput(noteText.trim());
+    if (sanitizedNote === null) {
+      return res.json({ reply: getConfusedReply() });
+    }
     const sanitized = sanitizeInput(userComment);
     if (sanitized === null) {
       return res.json({ reply: getConfusedReply() });
@@ -150,7 +154,7 @@ router.post('/comment-reply', authMiddleware, async (req, res) => {
     const user = await User.findById(req.userId);
     const intimacyLevel = user ? user.getIntimacyLevel().name : '陌生';
 
-    let reply = await aiService.generateCommentReply(noteText, sanitized, intimacyLevel);
+    let reply = await aiService.generateCommentReply(sanitizedNote, sanitized, intimacyLevel);
 
     // ===== 第3层：输出过滤 =====
     if (isOutOfCharacter(reply)) {
