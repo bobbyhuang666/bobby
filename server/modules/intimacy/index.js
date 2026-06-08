@@ -83,7 +83,7 @@ const PROMPT_INJECTIONS = {
   '认识': '你们算认识了，聊天会稍微放松一点，但还是会有点拘谨。',
   '熟悉': '你们挺熟了，可以自然地聊天，偶尔会开个小玩笑。',
   '默契': '你们之间有一种不需要说破的默契。可以更自然地分享日常，不用刻意找话题。',
-  '信赖': '你们之间有一种不需要说破的默契。可以更自然地分享日常，不用刻意找话题。',
+  '信赖': '这个人是你可以说真心话的人。深夜的时候，那些白天不会说的话，会想告诉他/她。',
 };
 
 // ═══════════════════════════════════════════
@@ -146,7 +146,7 @@ class IntimacySystem {
    * 获取等级配置（只读）
    */
   static get LEVELS() { return LEVELS; }
-  static get POINTS() { return POINTS; }
+  static get POINTS() { return { ...POINTS }; }
 }
 
 module.exports = { IntimacySystem, LEVELS, POINTS };

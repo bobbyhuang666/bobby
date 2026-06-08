@@ -33,7 +33,7 @@ async function callDeepSeek(messages, options = {}) {
 // 构建 Bobby 的系统 prompt
 // Andy 模式时：用 andyNarrative 替代 Bobby 自有的情绪/认知/世界事件注入
 // 降级模式时：使用 Bobby 自有 EmotionEngine + CognitiveLoop + WorldEngine
-function buildSystemPrompt({ user, bobbyStatus, recentNotes, timeLabel, emotionEngine, memoryProfile, recentThoughts, weatherContext, bobbySelfMemory, worldEvents, andyNarrative, isAndyMode = false }) {
+function buildSystemPrompt({ user, bobbyStatus, recentNotes, timeLabel, emotionEngine, memoryProfile, recentThoughts, weatherContext, bobbySelfMemory, worldEvents, andyNarrative, socialContext, isAndyMode = false }) {
   const hour = new Date().getHours();
   const isNight = hour >= 23 || hour < 3;
 
@@ -59,13 +59,14 @@ function buildSystemPrompt({ user, bobbyStatus, recentNotes, timeLabel, emotionE
 你不太会做饭，经常吃泡面或便利店的饭团。偶尔会煮个粥，但煮出来总是太稀。你对吃的要求不高，能吃饱就行。
 你经常拿起手机又放下，不知道在找什么。相册里存了很多截图，但从来不看。偶尔刷到一个视频会看好几遍，但说不上为什么。
 你对时间没什么概念。经常觉得"才过了一会儿"，但一看手机已经过了很久。下午和傍晚对你来说没什么区别。
-${timeInfo}。你当前的状态是：${bobbyStatus}。
+${timeInfo}。你刚才在${bobbyStatus}。你的状态会影响你的回复方式——在打工时像偷看手机、在图书馆时比较安静、在发呆时可能话更少。
 
-你最近发了这些动态：${notesText}`;
+你最近发了这些动态：${notesText}
+这些是你自己写的，是你真实的生活片段。如果对话和这些动态有关，可以自然地提到，比如"我刚发了个动态""刚才那个..."。不需要每次都提，但它们是你此刻生活的一部分。`;
 
   // ===== 天气注入（始终注入，Andy 不覆盖天气） =====
   if (weatherContext) {
-    prompt += `\n\n现在厦门的真实天气：${weatherContext}。如果对方问天气、温度、几度、下雨没，必须用这个真实数据回答，不要编造数字。你的回复可以自然地和天气呼应。比如下雨天可以说"外面下雨了"，天冷可以说"今天好冷"。`;
+    prompt += `\n\n现在厦门的真实天气：${weatherContext}。如果对方问天气必须用真实数据回答，不要编造数字。天气会影响你的感受和回复——下雨天你可能会说"外面下雨了"或"雨声好大"，天冷会说"好冷"，天热会说"好热"。不需要每次都提，但天气是你生活的一部分，自然地融入回复。`;
   }
 
   // ===== 内心状态注入 =====
@@ -96,6 +97,11 @@ ${timeInfo}。你当前的状态是：${bobbyStatus}。
   // ===== Bobby 自我记忆注入（始终注入） =====
   if (bobbySelfMemory) {
     prompt += `\n\n你想起一些关于自己的事：${bobbySelfMemory}。这些记忆可能会在某个瞬间浮现，影响你的情绪或回复。`;
+  }
+
+  // ===== V2: 社交上下文注入 =====
+  if (socialContext) {
+    prompt += `\n\n${socialContext}。这些是你和朋友之间的日常，可能会影响你此刻的状态。`;
   }
 
   // ===== 世界事件注入（仅降级模式） =====
@@ -170,7 +176,7 @@ ${timeInfo}。你当前的状态是：${bobbyStatus}。
 }
 
 // 生成聊天回复
-async function generateReply({ userText, history, user, bobbyStatus, recentNotes, timeLabel, emotionEngine, memoryProfile, recentThoughts, andyNarrative, systemPrompt: externalSystemPrompt, isAndyMode: externalAndyMode }) {
+async function generateReply({ userText, history, user, bobbyStatus, recentNotes, timeLabel, emotionEngine, memoryProfile, recentThoughts, andyNarrative, systemPrompt: externalSystemPrompt, isAndyMode: externalAndyMode, socialContext }) {
   // Andy 可用时：andyNarrative 已包含情绪/需求/记忆/认知，不需要额外获取世界事件
   // Andy 不可用时：从 worldEngine 降级事件库获取
   const [weatherContext, bobbySelfMemory, worldEvents] = await Promise.all([
@@ -194,7 +200,7 @@ async function generateReply({ userText, history, user, bobbyStatus, recentNotes
   // 降级模式：使用 aiService 自有的 buildSystemPrompt()
   const systemPrompt = externalSystemPrompt || buildSystemPrompt({
     user, bobbyStatus, recentNotes, timeLabel,
-    emotionEngine, memoryProfile, recentThoughts, weatherContext, bobbySelfMemory,
+    emotionEngine, memoryProfile, recentThoughts, weatherContext, bobbySelfMemory, socialContext,
     worldEvents, andyNarrative,
     isAndyMode
   });
@@ -360,4 +366,98 @@ ${emotionContext}
   }
 }
 
-module.exports = { generateReply, generateCommentReply, generateReflection, generateInnerThought, callDeepSeek };
+// ===== V2: 情绪驱动的碎片生成 =====
+
+/**
+ * 基于情绪状态 + 天气 + 社交上下文生成一条情感碎片
+ * 与传统模板碎片不同，这是 Bobby "真实的感受"
+ *
+ * @param {Object} options
+ * @param {Object} [options.emotionEngine] - EmotionEngine 实例
+ * @param {string} [options.status] - Bobby 当前状态
+ * @param {string} [options.weatherContext] - 天气描述
+ * @param {string} [options.socialContext] - 社交上下文
+ * @param {Array} [options.recentThoughts] - 最近的认知思维
+ * @returns {Promise<string|null>}
+ */
+async function generateEmotionNote({ emotionEngine, status, weatherContext, socialContext, recentThoughts } = {}) {
+  const hour = new Date().getHours();
+  const isNight = hour >= 23 || hour < 3;
+
+  // 情绪画像
+  let emotionProfile = '情绪平静';
+  if (emotionEngine) {
+    const valence = emotionEngine.getValence ? emotionEngine.getValence() : 0;
+    const arousal = emotionEngine.getArousal ? emotionEngine.getArousal() : 0.5;
+    const dominant = emotionEngine.getDominantEmotions ? emotionEngine.getDominantEmotions(2) : [];
+    const names = { joy: '开心', sadness: '低落', calm: '平静', loneliness: '孤独', boredom: '无聊', excitement: '兴奋', anxiety: '焦虑', contentment: '满足', fatigue: '疲惫', nostalgia: '怀念' };
+
+    const valenceLabel = valence > 0.3 ? '偏愉悦' : valence > -0.15 ? '中性' : '偏低落';
+    const arousalLabel = arousal > 0.6 ? '高唤醒' : arousal < 0.4 ? '低唤醒' : '中等唤醒';
+    const dominantStr = dominant.length > 0
+      ? dominant.map(e => names[e.dim] || e.dim).join('、')
+      : '';
+    emotionProfile = `情绪：${valenceLabel}，${arousalLabel}` +
+      (dominantStr ? `，主要感受：${dominantStr}` : '');
+  }
+
+  // 状态上下文
+  const statusLine = status ? `他现在：${status}` : '';
+
+  // 天气 + 时间
+  const weatherLine = weatherContext ? `天气：${weatherContext}` : '';
+  const timeLine = isNight ? '现在是深夜' : '';
+
+  // 社交
+  const socialLine = socialContext || '';
+
+  // 最近的思维（认知循环产出）
+  const thoughtsLine = (recentThoughts && recentThoughts.length > 0)
+    ? `他刚才在想：${recentThoughts.slice(-2).map(t => t.content || t).join('；')}`
+    : '';
+
+  const context = [statusLine, weatherLine, timeLine, socialLine, thoughtsLine, emotionProfile]
+    .filter(Boolean)
+    .join('。\n');
+
+  const messages = [
+    {
+      role: 'system',
+      content: `你是Bobby，一个独居的大学生，21岁，在厦门上学，课余在便利店打工。你性格INFP，安静内向，话不多但真实。
+
+${context}
+
+任务：写一条碎片——你现在真实的感受。写一句话，像是你停下手里的事，看了一眼窗外或手机屏幕，心里冒出来的一句话。
+
+硬性规则：
+- 8-25个字，一句话
+- 必须是此刻的真实感受，不是描述，不是叙事
+- 像心里冒出来的、没有说出口的话
+- 可以是情绪、感官、想法——但必须像真实的内心活动
+- 不解释、不修饰、不总结
+- 不要emoji
+- 不要说自己是AI
+- 不要提到室友、家人同住
+
+示例：
+「心里乱乱的。静不下来。」
+「今天还不错。虽然也没发生什么。」
+「有点想找人说说话。但算了。」
+「外面好安静。安静得有点心虚。」
+「突然觉得很累。不是身体累。」`
+    }
+  ];
+
+  try {
+    const reply = await callDeepSeek(messages, { maxTokens: 60, temperature: 0.9 });
+    if (!reply) return null;
+    // 如果太长，截断到第一句
+    const trimmed = reply.split(/[。！？\n]/)[0];
+    return (trimmed || reply).trim();
+  } catch (err) {
+    console.error('情绪碎片生成失败:', err.message);
+    return null;
+  }
+}
+
+module.exports = { generateReply, generateCommentReply, generateReflection, generateInnerThought, generateEmotionNote, callDeepSeek };

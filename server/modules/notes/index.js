@@ -11,6 +11,7 @@
  */
 
 const { BOBBY_DEFAULTS } = require('../../config/bobbyDefaults');
+const { SocialEngine } = require('../social');
 const bcfg = BOBBY_DEFAULTS;
 
 // ═══════════════════════════════════════════
@@ -89,12 +90,13 @@ const DAILY_NOTES = [
 // ═══════════════════════════════════════════
 
 class NoteSystem {
+  static _social = new SocialEngine();
   /**
    * 获取通用碎片池（只读副本）
    * @returns {string[]}
    */
   static getDailyPool() {
-    return DAILY_NOTES;
+    return [...DAILY_NOTES];
   }
 
   /**
@@ -110,25 +112,82 @@ class NoteSystem {
    * @param {Object} [options.emotionEngine] - EmotionEngine 实例（用于 valence 判断）
    * @returns {string}
    */
+  /**
+   * V2: 情绪驱动 + 社交感知碎片选择
+   *
+   * 策略优先级：
+   *   1. 20% 社交碎片（Bobby 与朋友的互动/想法）
+   *   2. 35% 状态专属碎片
+   *   3. 25% 情绪驱动碎片（基于 valence + arousal 组合）
+   *   4. 20% 通用碎片池
+   */
   static selectFragment({ status, emotionEngine } = {}) {
     const stateFragments = bcfg.stateFragments || {};
     const emotionFragments = bcfg.emotionFragments || {};
 
-    // 60% 概率尝试状态专属碎片
-    if (status && Math.random() < 0.6 && stateFragments[status]) {
+    // V2: 20% 社交碎片
+    if (NoteSystem._social && Math.random() < 0.20) {
+      const socialNote = NoteSystem._social.generateSocialNote({ emotionEngine });
+      if (socialNote) return socialNote;
+    }
+
+    // 35% 状态专属碎片
+    if (status && Math.random() < 0.35 && stateFragments[status]) {
       const pool = stateFragments[status];
       return pool[Math.floor(Math.random() * pool.length)];
     }
 
-    // 情绪倾向碎片（valence 偏离中性时）
-    if (emotionEngine && emotionEngine.getValence) {
-      const valence = emotionEngine.getValence();
-      const et = bcfg.emotionTransition;
-      if (valence < et.negativeThreshold && emotionFragments.negative && Math.random() < 0.4) {
-        return emotionFragments.negative[Math.floor(Math.random() * emotionFragments.negative.length)];
+    // V2: 情绪驱动碎片 — 基于 valence + arousal 组合
+    if (emotionEngine) {
+      const valence = emotionEngine.getValence ? emotionEngine.getValence() : 0;
+      const arousal = emotionEngine.getArousal ? emotionEngine.getArousal() : 0.5;
+
+      // 高唤醒 + 负面 → 焦虑/烦躁碎片
+      if (valence < -0.15 && arousal > 0.6 && Math.random() < 0.5) {
+        const anxious = [
+          '有点烦。不知道在烦什么。',
+          '心里乱乱的。静不下来。',
+          '想做点什么。但不知道做什么。',
+          '拿起手机又放下了。',
+          '翻来翻去。找不到舒服的姿势。',
+        ];
+        return anxious[Math.floor(Math.random() * anxious.length)];
       }
-      if (valence > et.positiveThreshold && emotionFragments.positive && Math.random() < 0.4) {
-        return emotionFragments.positive[Math.floor(Math.random() * emotionFragments.positive.length)];
+
+      // 低唤醒 + 负面 → 低落/疲惫碎片
+      if (valence < -0.15 && arousal <= 0.6 && Math.random() < 0.5) {
+        const low = [
+          '什么都不想做。',
+          '有点累。不是身体累。',
+          '就这样吧。',
+          '困了。但不想睡。',
+          '好安静。外面也是。',
+        ];
+        return low[Math.floor(Math.random() * low.length)];
+      }
+
+      // 高唤醒 + 正面 → 兴奋/开心碎片
+      if (valence > 0.2 && arousal > 0.5 && Math.random() < 0.4) {
+        const excited = [
+          '今天还不错。',
+          '心情挺好的。不知道为什么。',
+          '笑了一下。不知道在笑什么。',
+          '天气好，出去走了一下。',
+          '风好舒服。',
+        ];
+        return excited[Math.floor(Math.random() * excited.length)];
+      }
+
+      // 低唤醒 + 正面 → 平静/满足碎片
+      if (valence > 0.2 && arousal <= 0.5 && Math.random() < 0.4) {
+        const calm = [
+          '挺好的。',
+          '阳光很好。暖暖的。',
+          '路过花店。花很好看。',
+          '今天晚霞是粉色的。',
+          '安静。但不无聊。',
+        ];
+        return calm[Math.floor(Math.random() * calm.length)];
       }
     }
 
@@ -144,6 +203,126 @@ class NoteSystem {
     const { generateWeatherNote } = require('../weather');
     return generateWeatherNote();
   }
+
+  /**
+   * V2: 情绪驱动碎片生成（委托 aiService → LLM）
+   * 基于 Bobby 当前的真实情绪状态，用 LLM 生成一条情感碎片
+   */
+  static async generateEmotionNote({ emotionEngine, status, weatherContext, socialContext, recentThoughts } = {}) {
+    try {
+      const ai = require('../../services/aiService');
+      return await ai.generateEmotionNote({ emotionEngine, status, weatherContext, socialContext, recentThoughts });
+    } catch (e) {
+      return null;
+    }
+  }
+
+  static composeContextualNote({ status, weatherContext, emotionEngine, hour } = {}) {
+    const h = hour !== undefined ? hour : new Date().getHours();
+    const isNight = h >= 23 || h < 3;
+    const isRaining = weatherContext && weatherContext.includes('雨');
+    const isHot = weatherContext && (weatherContext.includes('热') || weatherContext.includes('3'));
+    const isCold = weatherContext && weatherContext.includes('冷');
+    const isWindy = weatherContext && weatherContext.includes('风');
+    const isSunny = weatherContext && weatherContext.includes('晴');
+
+    // 情绪倾向
+    let mood = 'neutral';
+    if (emotionEngine && emotionEngine.getValence) {
+      const v = emotionEngine.getValence();
+      if (v < -0.2) mood = 'low';
+      else if (v > 0.2) mood = 'warm';
+    }
+
+    // 天气 + 状态 组合模板
+    const templates = [];
+
+    // ─── 雨天专属 ───
+    if (isRaining) {
+      templates.push(
+        '下雨了。窗户上全是水痕。',
+        '雨声好大。在窗户边发了会呆。',
+        '下雨了，出门忘带伞。',
+        '雨停了。地上还有水坑。',
+        '潮得衣服都干不了。',
+        '空气里有泥土的味道。下雨了。',
+      );
+    }
+
+    // ─── 高温天 ───
+    if (isHot) {
+      templates.push(
+        '太热了。风扇吹的都是热风。',
+        '热得不想出门。在屋里躺着。',
+        '买了瓶冰水。瓶子外面全是水珠。',
+        '出汗了。T恤黏在身上。',
+      );
+    }
+
+    // ─── 大风天 ───
+    if (isWindy) {
+      templates.push(
+        '海风好大。晾的衣服差点飞了。',
+        '风把窗帘吹起来了。好几次。',
+        '外面风好大。呼呼的。',
+      );
+    }
+
+    // ─── 晴天 ───
+    if (isSunny && !isHot) {
+      templates.push(
+        '今天天气不错。阳光很好。',
+        '阳光照进来了。暖暖的。',
+        '天气好，出去走了一下。还行。',
+      );
+    }
+
+    // ─── 凉爽天 ───
+    if (isCold) {
+      templates.push(
+        '下楼扔垃圾。外面比想象中冷。',
+        '手有点凉。缩在袖子里。',
+        '冷。不想出被窝。',
+      );
+    }
+
+    // ─── 深夜专属 ───
+    if (isNight) {
+      templates.push(
+        '手机屏幕的光太亮了。但不想关。',
+        '外面偶尔有车经过的声音。',
+        '翻了个身。被子有点潮。',
+        '看了看时间。都这么晚了。',
+      );
+    }
+
+    // ─── 情绪专属 ───
+    if (mood === 'low') {
+      templates.push(
+        '不知道在烦什么。',
+        '有点闷。说不上来。',
+        '想一个人待一会儿。',
+        '什么都不想做。',
+        '有点累。不是身体累。',
+        '手机拿起来又放下了。',
+      );
+    } else if (mood === 'warm') {
+      templates.push(
+        '今天还不错。',
+        '心情挺好的。不知道为什么。',
+        '笑了一下。不知道在笑什么。',
+        '路过花店。花很好看。',
+      );
+    }
+
+    if (templates.length === 0) return null;
+
+    // 去重（避免和最近的碎片重复）
+    const note = templates[Math.floor(Math.random() * templates.length)];
+    return note;
+  }
+
+
 }
 
 module.exports = { NoteSystem, DAILY_NOTES };

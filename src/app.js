@@ -270,6 +270,8 @@ const state = {
   isProcessing: false, // Bobby 正在处理消息
   batchTimer: null,   // 消息批量计时器
   unreadBobbyReplies: 0, // 未读 Bobby 评论回复数
+  pendingWhispers: [], // 待显示的 Bobby 主动消息
+  weather: null, // 厦门实时天气
   authToken: null,   // 后端 JWT token
   moodTone: 'calm',  // 当前情绪色调
   giftEffectUntil: 0, // 礼物效果保护窗口截止时间戳
@@ -1201,13 +1203,36 @@ function showPage(pageId) {
     updateMood();
     updateIntimacyDisplay();
     updateMomentCard();
+    fetchWorldEvents();
+    fetchSharedWorld();
   } else if (pageId === 'notesPage') {
     loadNotes();
     const notesStatus = document.getElementById('notesStatus');
     if (notesStatus) notesStatus.textContent = state.statusText;
     clearUnreadBobbyReplies();
   } else if (pageId === 'chatPage') {
-    // 切回聊天页时滚到底部，确保看到最新消息
+    // 切回聊天页时：显示待处理的 Bobby 主动消息
+    if (state.pendingWhispers && state.pendingWhispers.length > 0) {
+      const whispers = [...state.pendingWhispers];
+      state.pendingWhispers = [];
+      // 清除聊天 tab 角标
+      const chatIcon = document.querySelector('[data-page="chatPage"]');
+      if (chatIcon) {
+        const badge = chatIcon.querySelector('.tab-badge');
+        if (badge) badge.remove();
+      }
+      // 逐条显示（模拟 Bobby 连续发消息的感觉）
+      whispers.forEach((data, i) => {
+        setTimeout(() => {
+          if (data.type === 'thought') {
+            addThought(data.content);
+          } else {
+            addMessage(data.content, false, true);
+          }
+        }, i * (800 + Math.random() * 1200));
+      });
+    }
+    // 滚到底部
     requestAnimationFrame(() => {
       chatScrollLocked = true;
       dom.chatArea.scrollTop = dom.chatArea.scrollHeight;
@@ -1992,6 +2017,114 @@ const STATUS_THOUGHT_COOLDOWN = 60 * 60 * 1000;
 
 // 状态由服务端权威推送（socket 'status_update' 事件），前端只做 UI 渲染
 // 不再本地推进状态机，避免前后端状态不一致
+
+
+// 获取 Bobby 世界事件流
+async function fetchWorldEvents() {
+  try {
+    const res = await fetch('/api/world-events');
+    if (!res.ok) return;
+    const { events } = await res.json();
+    const container = document.getElementById('worldEvents');
+    if (!container || !events || events.length === 0) return;
+
+    const typeIcons = {
+      status: '📍',
+      weather: '🌤',
+      emotion: '💭',
+      note: '📝',
+      thought: '🌙',
+    };
+
+    container.innerHTML = events.map(evt => {
+      const icon = typeIcons[evt.type] || '·';
+      const time = formatEventTime(new Date(evt.time));
+      return '<div class="world-event">' +
+        '<span class="world-event-icon">' + icon + '</span>' +
+        '<span class="world-event-text">' + escapeHtml(evt.content) + '</span>' +
+        '<span class="world-event-time">' + time + '</span>' +
+        '</div>';
+    }).join('');
+  } catch (e) {}
+}
+
+function formatEventTime(date) {
+  const now = new Date();
+  const diff = now - date;
+  if (diff < 60000) return '刚刚';
+  if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
+  return Math.floor(diff / 86400000) + '天前';
+}
+
+// V2: 获取共享世界状态（你和 Bobby 在同一个城市）
+async function fetchSharedWorld() {
+  try {
+    const res = await fetch('/api/shared-world');
+    if (!res.ok) return;
+    const data = await res.json();
+    renderSharedWorld(data);
+  } catch (e) {}
+}
+
+function renderSharedWorld(data) {
+  // 天气行
+  const weatherEl = document.getElementById('swWeather');
+  if (weatherEl && data.weather) {
+    const w = data.weather;
+    const icon = w.isRaining ? '🌧' : w.temp >= 33 ? '🔥' : w.temp <= 10 ? '❄' : w.description.includes('晴') ? '☀' : '⛅';
+    weatherEl.querySelector('.sw-icon').textContent = icon;
+    weatherEl.querySelector('.sw-text').textContent = `厦门 · ${w.temp}° · ${w.description}`;
+  }
+
+  // NPC 朋友行
+  const friendsEl = document.getElementById('swFriends');
+  if (friendsEl && data.friends && data.friends.length > 0) {
+    const avatarIcons = {
+      xiaoyu: '🐟', ahao: '🔧', linjie: '🚪', bianliyima: '🏪', maomi: '🐱'
+    };
+    const closenessColors = {
+      '亲近': 'rgba(255,180,120,0.7)', '普通': 'rgba(255,255,255,0.4)', '疏远': 'rgba(255,255,255,0.25)'
+    };
+    friendsEl.innerHTML = data.friends.map(f => {
+      const avatar = avatarIcons[f.id] || '👤';
+      const color = closenessColors[f.closenessLabel] || 'rgba(255,255,255,0.4)';
+      return '<div class="sw-friend">' +
+        '<span class="sw-friend-avatar">' + avatar + '</span>' +
+        '<span class="sw-friend-name">' + escapeHtml(f.name) + '</span>' +
+        '<span class="sw-friend-closeness" style="color:' + color + '">' + escapeHtml(f.closenessLabel) + '</span>' +
+        '</div>';
+    }).join('');
+  }
+
+  // NPC 自主行为行
+  const npcDivider = document.getElementById('swNpcDivider');
+  const npcLabel = document.getElementById('swNpcLabel');
+  const npcEventsEl = document.getElementById('swNpcEvents');
+  if (npcEventsEl && data.npcEvents && data.npcEvents.length > 0) {
+    if (npcDivider) npcDivider.style.display = '';
+    if (npcLabel) npcLabel.style.display = '';
+    npcEventsEl.innerHTML = data.npcEvents.slice(-4).map(e =>
+      '<div class="sw-npc-event">· ' + escapeHtml(e.content) + '</div>'
+    ).join('');
+  } else {
+    if (npcDivider) npcDivider.style.display = 'none';
+    if (npcLabel) npcLabel.style.display = 'none';
+    if (npcEventsEl) npcEventsEl.innerHTML = '';
+  }
+
+  // 最近的社交互动
+  if (data.recentSocial && data.recentSocial.length > 0 && npcEventsEl) {
+    const socialEvents = data.recentSocial.slice(-2).map(e => {
+      const time = formatEventTime(new Date(e.time));
+      return '<div class="sw-npc-event">· ' + escapeHtml(e.content) + '</div>';
+    }).join('');
+    if (socialEvents && npcEventsEl.innerHTML.length < 50) {
+      npcEventsEl.innerHTML += socialEvents;
+    }
+  }
+}
+
 function updateStatus() {
   const currentStatus = state.statusText || '还没睡呢';
   const currentHour = new Date().getHours();
@@ -2062,11 +2195,95 @@ function updateIntimacyDisplay() {
 }
 
 // ===== "此刻"感官描述 =====
+
+// 天气感知的"此刻"描述
+function getWeatherMoment(status, weather, hour) {
+  if (!weather || !weather.temp) return null;
+  const t = weather.temp;
+  const desc = weather.description || '';
+  const isRaining = weather.isRaining;
+  const isNight = hour >= 23 || hour < 3;
+
+  // 下雨天 — 所有可能的状态都优先提雨
+  if (isRaining) {
+    const rainMoments = {
+      '在发呆': '雨声好大。在窗户边发了会呆。',
+      '在看窗外': '窗户上全是水痕。外面的世界模糊了。',
+      '还没睡呢': '雨打在窗户上。睡不着。',
+      '在图书馆': '雨声隔着窗户传进来。翻书的声音被盖住了。',
+      '在听歌': '耳机外面是雨声。里面是音乐。',
+      '在上课': '窗户上有雨水在流。走神了。',
+      '在休息': '听着雨声。有点困。',
+      '在看手机': '外面下雨了。手机屏幕的光更亮了。',
+    };
+    if (rainMoments[status]) return rainMoments[status];
+    // 通用雨天描述
+    if (isNight) return '雨还在下。安静了。';
+    return '下雨了。空气里有泥土的味道。';
+  }
+
+  // 高温天
+  if (t >= 33) {
+    const hotMoments = {
+      '在发呆': '太热了。风扇吹的都是热风。',
+      '在图书馆': '图书馆的空调开得刚好。不想出去。',
+      '在上课': '教室里闷得不行。在走神。',
+      '刚出门': '一出门就是一股热浪。',
+      '到家了': '到家了。先开空调。',
+    };
+    if (hotMoments[status]) return hotMoments[status];
+    if (t >= 35) return '好热。什么都不想做。';
+  }
+
+  // 大风天
+  if (weather.windSpeed >= 20) {
+    const windMoments = {
+      '在发呆': '风好大。窗帘被吹起来了。',
+      '在看窗外': '外面的树在晃。风应该很大。',
+      '刚出门': '风好大。头发全乱了。',
+      '在回家路上': '逆风走。好累。',
+    };
+    if (windMoments[status]) return windMoments[status];
+  }
+
+  // 晴天 + 温度宜人
+  if (desc.includes('晴') && t >= 20 && t <= 30) {
+    const sunnyMoments = {
+      '在发呆': '阳光照进来了。暖暖的。',
+      '在图书馆': '窗外阳光很好。但还是在看书。',
+      '在看窗外': '阳光很好。外面有人在散步。',
+      '在休息': '阳光照在身上。好舒服。',
+    };
+    if (sunnyMoments[status]) return sunnyMoments[status];
+  }
+
+  // 凉爽天
+  if (t <= 18 && t > 10) {
+    const coolMoments = {
+      '刚出门': '外面有点凉。缩了缩脖子。',
+      '在回家路上': '风凉凉的。走得快了一点。',
+      '到家了': '外面冷。屋里暖和。',
+    };
+    if (coolMoments[status]) return coolMoments[status];
+  }
+
+  return null; // 无特殊天气描述，使用默认
+}
+
 function updateMomentCard() {
   const status = state.statusText || '在发呆';
   const hour = new Date().getHours();
+  const w = state.weather;
 
-  // 根据状态生成感官描述
+  // 天气感知的"此刻"描述
+  // 先检查是否有天气相关的特殊描述，再回退到状态默认描述
+  const weatherMoment = getWeatherMoment(status, w, hour);
+  if (weatherMoment) {
+    const el = document.getElementById('momentText');
+    if (el) el.textContent = weatherMoment;
+    return; // 天气感知描述优先，不再回退到状态默认描述
+  }
+
   const momentMap = {
     '还没睡呢': '台灯的光有点暗了。外面偶尔有车经过的声音。',
     '在发呆': '盯着天花板，脑子里什么也没想。',
@@ -2460,6 +2677,7 @@ function initSocket() {
           state.bobbyArousal = data.emotion.arousal || 0.5;
         }
         updateStatus();
+        updateMomentCard(); // 此刻卡片跟随状态实时更新
         // 状态变化时显示微提示（1小时冷却）
         if (prevState && prevState !== data.status &&
             Date.now() - lastStatusThoughtTime > STATUS_THOUGHT_COOLDOWN &&
@@ -2483,16 +2701,35 @@ function initSocket() {
 
     // Bobby 低语（服务端推送）
     socket.on('bobby_whisper', (data) => {
-      if (state.currentPage !== 'chatPage') return;
       if (!data.content) return;
 
       // 设置冷却期，防止前端 checkWhisper 同时发送本地低语
       state.lastWhisper = Date.now();
 
-      if (data.type === 'thought') {
-        addThought(data.content);
+      if (state.currentPage === 'chatPage') {
+        // 在聊天页：直接显示
+        if (data.type === 'thought') {
+          addThought(data.content);
+        } else {
+          addMessage(data.content, false, true);
+        }
       } else {
-        addMessage(data.content, false, true); // 服务端推送，已存储
+        // 不在聊天页：保存到待显示队列，切回聊天页时显示
+        if (!state.pendingWhispers) state.pendingWhispers = [];
+        state.pendingWhispers.push(data);
+
+        // 更新聊天 tab 的未读角标
+        const chatIcon = document.querySelector('[data-page="chatPage"]');
+        if (chatIcon) {
+          let badge = chatIcon.querySelector('.tab-badge');
+          const count = state.pendingWhispers.length;
+          if (!badge) {
+            badge = document.createElement('span');
+            badge.className = 'tab-badge';
+            chatIcon.appendChild(badge);
+          }
+          badge.textContent = count > 99 ? '99+' : count;
+        }
       }
     });
 
@@ -2515,7 +2752,22 @@ function initSocket() {
 }
 
 // ===== 定时更新 =====
+// 获取厦门天气（每 30 分钟刷新）
+async function fetchWeather() {
+  try {
+    const res = await fetch('/api/weather');
+    if (res.ok) state.weather = await res.json();
+  } catch (e) {}
+}
+
 function startScheduler() {
+  fetchWeather();
+  fetchWorldEvents();
+  fetchSharedWorld();
+  setInterval(() => {
+    fetchWeather().then(() => updateMomentCard());
+  }, 30 * 60 * 1000);
+  setInterval(fetchWorldEvents, 5 * 60 * 1000);
   setInterval(updateMood, 60000);
   setInterval(checkWhisper, 60000); // 每分钟检查一次是否低语
   checkDailyNote();

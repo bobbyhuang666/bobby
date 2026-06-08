@@ -13,6 +13,7 @@
 
 const Note = require('../../models/Note');
 const aiService = require('../../services/aiService');
+const { SocialEngine } = require('../social');
 
 // Bobby 的认知模块（并发运行）
 const COGNITIVE_MODULES = {
@@ -50,12 +51,7 @@ const THOUGHT_TEMPLATES = {
     '有时候觉得自己挺奇怪的',
     '算了，就这样吧',
   ],
-  social_thinking: [
-    '不知道那个人在干嘛',
-    '好久没联系了...',
-    '好像有人一直在',
-    '有人给我送了东西...',
-  ],
+  social_thinking: [],  // 动态生成，使用 SocialEngine
   sensory: [
     '风变大了',
     '外面好像有鸟叫',
@@ -73,6 +69,7 @@ class CognitiveLoop {
     this.thoughtQueue = [];       // 待处理的思维
     this.recentThoughts = [];     // 最近的思维记录（防重复）
     this.activeModule = null;     // 当前活跃的认知模块
+    this.social = new SocialEngine(); // 社交引擎（用于社交思考）
   }
 
   // ===== Reverie（沉思周期）：每 30 分钟 =====

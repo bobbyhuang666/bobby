@@ -9,6 +9,7 @@ const { CognitiveLoop } = require('./cognitiveLoop');
 const { getTimeLabel, getTimePeriod } = require('../utils/time');
 const { getWeatherContext } = require('./weatherService');
 const { NoteSystem } = require('../modules/notes');
+const { SocialEngine } = require('../modules/social');
 const { BOBBY_DEFAULTS } = require('../config/bobbyDefaults');
 const bcfg = BOBBY_DEFAULTS;
 
@@ -77,6 +78,7 @@ class BobbyEngine {
     this.state = null;
     this.emotion = null;  // 情绪引擎实例
     this.cognitive = null; // 认知循环实例
+    this.social = null;     // 社交引擎实例
     this.bridge = null;    // Andy 桥接层（可选）
   }
 
@@ -137,6 +139,14 @@ class BobbyEngine {
 
     // 初始化认知循环
     this.cognitive = new CognitiveLoop(this.emotion, this);
+
+    // 初始化社交引擎
+    this.social = new SocialEngine();
+
+    // 加载 NPC 动态关系（从 BobbyState 恢复 closeness）
+    if (state && state.npcRelationships && state.npcRelationships.length > 0) {
+      this.social.loadRelationships(state.npcRelationships);
+    }
 
     // Andy 引擎初始化由 app.js 在 setAndyBridge() 后单独处理
     // （因为 init() 在 setAndyBridge() 之前调用）
@@ -290,10 +300,10 @@ class BobbyEngine {
   }
 
   /**
-   * 状态感知碎片选择
-   * 优先级：状态专属碎片 > 情绪倾向碎片 > 通用碎片池
+   * 状态感知碎片选择（委托 NoteSystem）
+   * 优先级：社交碎片 > 状态专属碎片 > 情绪倾向碎片 > 通用碎片池
    */
-  selectFragment(dailyNotes) {
+  selectFragment() {
     return NoteSystem.selectFragment({
       status: this.state ? this.state.currentStatus : '',
       emotionEngine: this.emotion,
@@ -333,6 +343,66 @@ class BobbyEngine {
   async handleMessage(userId, text) {
     const user = await User.findById(userId);
     if (!user) return null;
+
+    // ===== 用户回归检测 =====
+    // 如果用户超过 1 天没来，Bobby 需要知道时间过去了
+    let absenceContext = null;
+    const now = Date.now();
+    const lastVisit = user.lastVisit ? new Date(user.lastVisit).getTime() : now;
+    const hoursAway = (now - lastVisit) / 3600000;
+
+    if (hoursAway > 24) {
+      const days = Math.floor(hoursAway / 24);
+      // 生成 Bobby 在用户离开期间的"生活片段"
+      const { NoteSystem } = require('../modules/notes');
+      const { getWeatherContext } = require('./weatherService');
+      let weatherCtx = '';
+      try { weatherCtx = await getWeatherContext(); } catch (e) {}
+
+      const recentNotes = await Note.find().sort({ publishedAt: -1 }).limit(3).lean();
+      const notesSummary = recentNotes.map(n => n.content).join('；');
+
+      // V2: 获取社交事件（用户不在时 Bobby 和朋友发生了什么）
+      let socialCtx = '';
+      if (this.state && this.state.socialState && this.state.socialState.recentEvents) {
+        const recentSocial = this.state.socialState.recentEvents.slice(-3);
+        if (recentSocial.length > 0) {
+          socialCtx = '你身边最近发生的事：' + recentSocial.map(e => e.content).join('；');
+        }
+      }
+
+      // V2: NPC 世界事件（用户不在时 NPC 们做了什么）
+      let npcCtx = '';
+      if (this.state && this.state.worldEvents) {
+        const npcEvents = this.state.worldEvents
+          .filter(e => e.type === 'npc_autonomous')
+          .slice(-3);
+        if (npcEvents.length > 0) {
+          npcCtx = '你世界里最近的事：' + npcEvents.map(e => e.content).join('；');
+        }
+      }
+
+      if (days >= 7) {
+        absenceContext = '这个人已经' + days + '天没来了。你有点想他/她，但不会说出来。';
+      } else if (days >= 3) {
+        absenceContext = '这个人好几天没来了。你偶尔会想到他/她。';
+      } else {
+        absenceContext = '这个人昨天没来。';
+      }
+      if (notesSummary) {
+        absenceContext += '你最近的生活：' + notesSummary;
+      }
+      if (socialCtx) {
+        absenceContext += '。' + socialCtx;
+      }
+      if (npcCtx) {
+        absenceContext += '。' + npcCtx;
+      }
+    }
+
+    // 更新最后访问时间
+    user.lastVisit = new Date();
+    await user.save();
 
     // 保存用户消息
     const batchId = `batch_${Date.now()}`;
@@ -431,7 +501,14 @@ class BobbyEngine {
         memoryProfile,
         recentThoughts: this.cognitive ? this.cognitive.getRecentThoughts() : [],
       });
+      // 注入用户回归上下文
+      if (absenceContext) {
+        systemPrompt += '\n\n' + absenceContext;
+      }
     }
+
+    // 获取社交上下文（V2：Bobby 的朋友动态）
+    const socialContext = this.getSocialContext();
 
     const reply = await aiService.generateReply({
       userText: text,
@@ -446,6 +523,7 @@ class BobbyEngine {
       andyNarrative,
       systemPrompt,
       isAndyMode: _useAndy,
+      socialContext,
     });
 
     // 保存 Bobby 回复
@@ -482,6 +560,22 @@ class BobbyEngine {
       await MemoryService.learnFromConversation(userId, text, reply);
     } catch (err) {
       console.error('记忆学习失败:', err.message);
+    }
+
+    // ===== 关系里程碑记忆 =====
+    if (upgraded) {
+      try {
+        const newLevel = user.getIntimacyLevel();
+        await MemoryService.addMemory(userId, {
+          type: 'event',
+          content: '我们的关系变了，现在是"' + newLevel.name + '"了',
+          emotionTag: newLevel.name === '信赖' ? 'warm' : 'neutral',
+          source: 'inference',
+          tags: ['relationship', 'milestone', newLevel.name],
+        });
+      } catch (err) {
+        // 里程碑记忆失败不影响主流程
+      }
     }
 
     return { reply: msg, upgraded, intimacyLevel: user.getIntimacyLevel() };
@@ -532,6 +626,114 @@ class BobbyEngine {
     }
 
     return { bobbyReply };
+  }
+
+  // ===== V2: 社交事件生成 =====
+  /**
+   * 生成一次社交事件（由定时任务调用）
+   * 社交事件会影响 Bobby 的情绪，并可能生成碎片
+   */
+  async tickSocial() {
+    if (!this.social || !this.emotion) return null;
+
+    const event = this.social.generateEvent({
+      emotionEngine: this.emotion,
+      currentStatus: this.state ? this.state.currentStatus : null,
+    });
+    if (!event) return null;
+
+    // 社交事件影响情绪
+    if (event.emotionImpact && this.emotion) {
+      for (const [dim, delta] of Object.entries(event.emotionImpact)) {
+        if (this.emotion.current[dim] !== undefined) {
+          this.emotion.current[dim] = Math.max(-1, Math.min(1, this.emotion.current[dim] + delta));
+        }
+      }
+    }
+
+    // 持久化社交事件到 BobbyState
+    if (this.state) {
+      const today = new Date().toDateString();
+      const socialUpdate = {
+        $push: {
+          'socialState.recentEvents': {
+            $each: [{
+              type: event.type,
+              friendId: event.friendId,
+              friendName: event.friendName,
+              content: event.content,
+              time: new Date(),
+            }],
+            $slice: -20,
+          },
+        },
+        $set: {
+          'socialState.lastSocialEventAt': new Date(),
+        },
+      };
+
+      // 重置每日计数
+      if (this.state.socialState && this.state.socialState.interactionsDate !== today) {
+        socialUpdate.$set['socialState.interactionsToday'] = 0;
+        socialUpdate.$set['socialState.interactionsDate'] = today;
+      }
+      socialUpdate.$inc = { 'socialState.interactionsToday': 1 };
+
+      await this._updateState(socialUpdate);
+
+      // 记录为世界事件
+      await BobbyState.findOneAndUpdate(
+        { _singleton: 'bobby' },
+        {
+          $push: {
+            worldEvents: {
+              $each: [{ type: 'social', content: event.content, time: new Date() }],
+              $slice: -30,
+            },
+          },
+        }
+      );
+    }
+
+    return event;
+  }
+
+  /**
+   * V2: NPC 自主行为生成（由定时任务调用）
+   * NPC 独立于 Bobby 做自己的事，记录到世界事件流
+   */
+  async tickNPCAutonomy() {
+    if (!this.social || !this.emotion) return null;
+
+    const behavior = this.social.generateAutonomousBehavior({
+      emotionEngine: this.emotion,
+    });
+    if (!behavior) return null;
+
+    // 记录为世界事件
+    if (this.state) {
+      await this._updateState({
+        $push: {
+          worldEvents: {
+            $each: [{ type: 'npc_autonomous', content: behavior.content, time: new Date() }],
+            $slice: -30,
+          },
+        },
+        $set: {
+          npcRelationships: this.social.exportRelationships(),
+        },
+      });
+    }
+
+    return behavior;
+  }
+
+  /**
+   * 获取社交上下文（供 prompt 使用）
+   */
+  getSocialContext() {
+    if (!this.social) return null;
+    return this.social.getSocialContext();
   }
 
   getTimeLabel() {

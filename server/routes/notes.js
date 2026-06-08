@@ -65,6 +65,16 @@ router.post('/:id/like', authMiddleware, validateObjectId('id'), async (req, res
         user.addIntimacy(2);
         await user.save();
       }
+
+      // Bobby 感受到被关注 → 情绪微调（温暖感 +1）
+      try {
+        const bobbyEngine = req.app.get('bobbyEngine');
+        if (bobbyEngine && bobbyEngine.emotion) {
+          bobbyEngine.emotion.tick('有人给我点赞了', 0);
+        }
+      } catch (e) {
+        // 情绪反馈失败不影响点赞
+      }
     }
 
     await note.save();

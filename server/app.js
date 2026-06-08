@@ -146,6 +146,85 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
+// 天气 API（供前端"此刻"卡片使用）
+app.get('/api/weather', async (req, res) => {
+  try {
+    const { getXiamenWeather } = require('./modules/weather');
+    const weather = await getXiamenWeather();
+    res.json(weather || { temp: '?', description: '未知' });
+  } catch (err) {
+    res.json({ temp: '?', description: '未知' });
+  }
+});
+
+// Bobby 世界事件流（最近的生活片段）
+app.get('/api/world-events', async (req, res) => {
+  try {
+    const BobbyState = require('./models/BobbyState');
+    const state = await BobbyState.findOne({ _singleton: 'bobby' })
+      .select('worldEvents socialState')
+      .lean();
+    const events = (state?.worldEvents || [])
+      .sort((a, b) => new Date(b.time) - new Date(a.time))
+      .slice(0, 15);
+    res.json({ events });
+  } catch (err) {
+    res.json({ events: [] });
+  }
+});
+
+// V2: Bobby 共享世界状态（你和 Bobby 生活在同一个世界）
+app.get('/api/shared-world', async (req, res) => {
+  try {
+    const BobbyState = require('./models/BobbyState');
+    const { getXiamenWeather } = require('./modules/weather');
+
+    const [state, weather] = await Promise.all([
+      BobbyState.findOne({ _singleton: 'bobby' }).select('currentStatus socialState npcRelationships worldEvents').lean(),
+      getXiamenWeather().catch(() => null),
+    ]);
+
+    // V2: 使用动态 closeness，来自 npcRelationships 持久化数据
+    const { FRIENDS } = require('./modules/social');
+    const relMap = new Map();
+    (state?.npcRelationships || []).forEach(r => relMap.set(r.friendId, r));
+
+    const friends = FRIENDS.map(f => {
+      const rel = relMap.get(f.id);
+      const closeness = rel ? rel.closeness : f.closeness;
+      const label = closeness >= 0.7 ? '亲近' : closeness >= 0.4 ? '普通' : '疏远';
+      return {
+        id: f.id,
+        name: f.name,
+        relation: f.relation,
+        closeness: Math.round(closeness * 100),
+        closenessLabel: label,
+        interactionCount: rel ? rel.interactionCount : 0,
+      };
+    });
+
+    const recentSocial = (state?.socialState?.recentEvents || [])
+      .slice(-5)
+      .map(e => ({ friendName: e.friendName, content: e.content, time: e.time }));
+
+    // V2: NPC 自主行为（从世界事件流中提取 npc_autonomous 类型）
+    const npcEvents = (state?.worldEvents || [])
+      .filter(e => e.type === 'npc_autonomous')
+      .slice(-5)
+      .map(e => ({ content: e.content, time: e.time }));
+
+    res.json({
+      weather: weather || { temp: '?', description: '未知' },
+      bobbyStatus: state?.currentStatus || '未知',
+      friends,
+      recentSocial,
+      npcEvents,
+    });
+  } catch (err) {
+    res.json({ weather: { temp: '?', description: '未知' }, bobbyStatus: '未知', friends: [], recentSocial: [] });
+  }
+});
+
 // ===== 启动（异步初始化）=====
 async function start() {
   // 先连接数据库

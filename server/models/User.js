@@ -28,6 +28,11 @@ const userSchema = new mongoose.Schema({
   mood: { type: String, default: '' },
   lastTopic: { type: String, default: '' },
 
+  // 主动消息追踪
+  proactiveCountToday: { type: Number, default: 0 },
+  lastProactiveDate: { type: String, default: '' },
+  lastProactiveAt: { type: Date },
+
   // 设置
   settings: {
     notifications: { type: Boolean, default: true },

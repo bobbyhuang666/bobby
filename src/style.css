@@ -1211,6 +1211,150 @@ input:focus-visible {
   letter-spacing: 0.5px;
 }
 
+/* Bobby 的世界 — 事件流时间线 */
+.world-events {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.world-event {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
+  transition: background 0.2s;
+}
+
+.world-event:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.world-event-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+  margin-top: 1px;
+}
+
+.world-event-text {
+  flex: 1;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.4;
+}
+
+.world-event-time {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* V2: 共享世界 — 你和 Bobby 在同一个城市 */
+.shared-world {
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  padding: 14px 16px;
+  gap: 6px;
+}
+
+.sw-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.sw-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  width: 22px;
+  text-align: center;
+}
+
+.sw-text {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.5;
+}
+
+.sw-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 6px 0;
+}
+
+.sw-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  text-transform: none;
+  letter-spacing: 0.02em;
+  padding: 2px 0;
+}
+
+.sw-friends {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sw-friend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+  padding: 5px 10px;
+  font-size: 13px;
+  transition: background 0.2s;
+}
+
+.sw-friend:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.sw-friend-avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+
+.sw-friend-name {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.sw-friend-closeness {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-left: 2px;
+}
+
+.sw-npc-events {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.sw-npc-event {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.4;
+  padding-left: 2px;
+}
+
+
 /* 礼物入口 */
 .gift-entry {
   display: flex;

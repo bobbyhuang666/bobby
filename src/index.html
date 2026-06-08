@@ -114,6 +114,33 @@
           <div class="moment-text" id="momentText">窗户上有雾气，外面的灯光有点模糊。</div>
         </div>
 
+        <!-- V2: 共享世界 — 你和 Bobby 在同一个城市 -->
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">你们的世界</span>
+          </div>
+          <div id="sharedWorld" class="shared-world">
+            <div class="sw-row sw-weather" id="swWeather">
+              <span class="sw-icon">🌤</span>
+              <span class="sw-text">厦门 · 加载中...</span>
+            </div>
+            <div class="sw-divider"></div>
+            <div class="sw-label">他身边的人</div>
+            <div id="swFriends" class="sw-friends"></div>
+            <div class="sw-divider" id="swNpcDivider" style="display:none"></div>
+            <div class="sw-label" id="swNpcLabel" style="display:none">他们在做什么</div>
+            <div id="swNpcEvents" class="sw-npc-events"></div>
+          </div>
+        </div>
+
+        <!-- Bobby 的世界 — 最近发生的事 -->
+        <div class="section">
+          <div class="section-header">
+            <span class="section-title">Bobby 的世界</span>
+          </div>
+          <div id="worldEvents" class="world-events"></div>
+        </div>
+
         <!-- 送礼入口 -->
         <div class="gift-entry" onclick="showGiftPanel()">
           <span class="gift-entry-icon">☕</span>

@@ -9,6 +9,8 @@ const { getTimeLabel } = require('../utils/time');
 const { getWeatherContext, generateWeatherNote } = require('../services/weatherService');
 const { WorldEngine } = require('../services/worldEngine');
 const { NoteSystem } = require('../modules/notes');
+const { ProactiveMessenger } = require('../modules/proactive');
+const { EVENT_TYPES } = require('../modules/social');
 
 // Bobby 的碎片素材（委托 modules/notes）
 const DAILY_NOTES = NoteSystem.getDailyPool();
@@ -18,6 +20,24 @@ const WHISPERS_DAY = ['嗯', '困', '来了'];
 const MUTTERS_NIGHT = ['下雨了', '路灯灭了', '月亮挺亮的', '隔壁灯也灭了', '猫又来了', '好困...', '外面好安静'];
 const MUTTERS_DAY = ['今天阳光不错', '树叶在晃', '有点饿了', '困', '风好大'];
 
+
+
+// 记录世界事件（保留最近 30 条）
+async function recordWorldEvent(type, content) {
+  try {
+    await BobbyState.findOneAndUpdate(
+      { _singleton: 'bobby' },
+      {
+        $push: {
+          worldEvents: {
+            $each: [{ type, content, time: new Date() }],
+            $slice: -30
+          }
+        }
+      }
+    );
+  } catch (e) {}
+}
 function startJobs(bobbyEngine, io, sdkAdapter) {
   const hasAndy = !!sdkAdapter;
 
@@ -28,6 +48,7 @@ function startJobs(bobbyEngine, io, sdkAdapter) {
         const result = await bobbyEngine.tickAndy();
         if (result && result.stateChanged) {
           console.log(`Andy tick: ${result.bobbyStatus} (tick #${result.time?.tick || '?'})`);
+          await recordWorldEvent('status', result.bobbyStatus);
         }
       } catch (err) {
         console.error('Andy tick 失败:', err.message);
@@ -42,6 +63,37 @@ function startJobs(bobbyEngine, io, sdkAdapter) {
       await bobbyEngine.updateStatus();
     } catch (err) {
       console.error('状态更新失败:', err.message);
+    }
+  });
+
+  // ===== V2: 每 20 分钟生成社交事件 =====
+  cron.schedule('*/20 * * * *', async () => {
+    try {
+      const event = await bobbyEngine.tickSocial();
+      if (event) {
+        console.log('Bobby 社交事件: ' + event.content + ' [' + event.type + ']');
+        await recordWorldEvent('social', event.content);
+
+        // 社交温暖事件有概率推送给在线用户
+        if (event.type === 'social_warmth' && io && Math.random() < 0.3) {
+          io.emit('bobby_whisper', { content: event.content, type: 'thought' });
+        }
+      }
+    } catch (err) {
+      console.error('社交事件失败:', err.message);
+    }
+  });
+
+  // ===== V2: 每 45 分钟 NPC 自主行为 =====
+  cron.schedule('*/45 * * * *', async () => {
+    try {
+      const behavior = await bobbyEngine.tickNPCAutonomy();
+      if (behavior) {
+        console.log('NPC 自主行为: ' + behavior.friendName + ' - ' + behavior.content);
+        await recordWorldEvent('npc_autonomous', behavior.content);
+      }
+    } catch (err) {
+      console.error('NPC 自主行为失败:', err.message);
     }
   });
 
@@ -85,17 +137,69 @@ function startJobs(bobbyEngine, io, sdkAdapter) {
 
       if (Math.random() > chance) return;
 
-      // 选择碎片内容：30% 概率用天气相关，70% 用状态感知选择
+      // 碎片生成策略（按优先级）：
+      //   0. 15% 情绪驱动 LLM 碎片（Bobby 此刻真实的感受，AI 生成）
+      //   1. 20% 上下文感知碎片（状态 + 真实天气 + 情绪 → 组合生成）
+      //   2. 10% 天气驱动碎片（纯天气模板）
+      //   3. 10% 认知循环碎片（Bobby 的内心独白 → 发成动态）
+      //   4. 10% 社交碎片（V2: Bobby 与朋友的互动/想法）
+      //   5. 35% 状态感知碎片（情绪加权 + 状态专属池）
       let noteText;
-      if (Math.random() < 0.3) {
+
+      // 获取天气上下文（有 30 分钟缓存，不会频繁请求）
+      let weatherCtx = '';
+      try { weatherCtx = await getWeatherContext(); } catch (e) {}
+
+      // V2: 策略 0 — 情绪驱动 LLM 碎片（Bobby 此刻真实的感受 → AI 生成）
+      if (Math.random() < 0.15) {
+        try {
+          const socialCtx = bobbyEngine.getSocialContext ? bobbyEngine.getSocialContext() : null;
+          const thoughts = bobbyEngine.cognitive ? bobbyEngine.cognitive.getRecentThoughts() : [];
+          noteText = await NoteSystem.generateEmotionNote({
+            emotionEngine: bobbyEngine.emotion,
+            status: state.currentStatus,
+            weatherContext: weatherCtx,
+            socialContext: socialCtx,
+            recentThoughts: thoughts,
+          });
+        } catch (e) {}
+      }
+
+      // 策略 1：上下文感知碎片（Bobby 此刻的真实感受）
+      if (Math.random() < 0.20) {
+        noteText = NoteSystem.composeContextualNote({
+          status: state.currentStatus,
+          weatherContext: weatherCtx,
+          emotionEngine: bobbyEngine.emotion,
+        });
+      }
+
+      // 策略 2：天气驱动碎片
+      if (!noteText && Math.random() < 0.25) {
         noteText = await generateWeatherNote();
       }
+
+      // 策略 3：认知循环碎片（Bobby 的真实想法）
+      if (!noteText && bobbyEngine.cognitive && Math.random() < 0.15) {
+        try {
+          const thought = await bobbyEngine.cognitive.reverie();
+          if (thought && thought.length <= 30 && !state.recentNoteTexts.includes(thought)) {
+            noteText = thought;
+          }
+        } catch (e) {}
+      }
+
+      // 策略 4：社交碎片（V2）
+      if (!noteText && bobbyEngine.social && Math.random() < 0.15) {
+        noteText = bobbyEngine.social.generateSocialNote({ emotionEngine: bobbyEngine.emotion });
+      }
+
+      // 策略 5：状态感知碎片（情绪加权 + 状态专属池）（兜底）
       if (!noteText) {
         let attempts = 0;
         do {
-          // 使用 BobbyEngine 的状态感知碎片选择（情绪加权 + 状态专属池）
           noteText = bobbyEngine.selectFragment
-            ? bobbyEngine.selectFragment(DAILY_NOTES)
+            ? bobbyEngine.selectFragment()
             : DAILY_NOTES[Math.floor(Math.random() * DAILY_NOTES.length)];
           attempts++;
         } while (state.recentNoteTexts.includes(noteText) && attempts < 10);
@@ -132,93 +236,43 @@ function startJobs(bobbyEngine, io, sdkAdapter) {
         io.emit('new_note', { content: noteText, timeDetail: now.toISOString() });
       }
 
-      console.log(`Bobby 发了新碎片: ${noteText}`);
+      console.log('Bobby 发了新碎片: ' + noteText);
+      await recordWorldEvent('note', noteText);
     } catch (err) {
       console.error('碎片生成失败:', err.message);
     }
   });
 
-  // ===== 每 10 分钟检查是否发送低语 =====
+  // ===== 每 10 分钟：Bobby 主动消息（基于内心状态选择特定用户）=====
   cron.schedule('*/10 * * * *', async () => {
     try {
+      // 全局低语计数重置（每天）
       const state = await getBobbyState();
-      if (!state) return;
-
-      const today = new Date().toDateString();
-      if (state.whisperDate !== today) {
-        state.whisperCount = 0;
-        state.whisperDate = today;
-      }
-
-      // 每个用户每天最多 2 条低语
-      if (state.whisperCount >= 2) return;
-
-      const h = new Date().getHours();
-      const isNight = h >= 23 || h < 3;
-      const chance = isNight ? 0.3 : 0.1;
-
-      if (Math.random() > chance) return;
-
-      // 选择低语内容（基于情绪状态）
-      const isMutter = Math.random() < 0.5;
-      let content, type;
-
-      // 获取情绪状态决定内容倾向
-      const emotion = bobbyEngine.emotion;
-      const valence = emotion && emotion.getValence ? emotion.getValence() : 0;
-      const arousal = emotion && emotion.getArousal ? emotion.getArousal() : 0;
-
-      if (isMutter) {
-        // 碎碎念：根据情绪选池
-        let pool;
-        if (valence < -0.2) {
-          // 低落时的碎碎念
-          pool = isNight
-            ? ['好安静...', '风好大', '睡不着', '好困', '外面好暗']
-            : ['有点累', '好热', '困', '不想动'];
-        } else if (valence > 0.3 && arousal > 0.2) {
-          // 开心时的碎碎念
-          pool = isNight
-            ? ['今天还不错', '心情挺好', '风好舒服', '月亮好亮']
-            : ['天气不错', '风好大', '今天效率还行'];
-        } else {
-          // 平静时用默认池
-          pool = isNight ? MUTTERS_NIGHT : MUTTERS_DAY;
+      if (state) {
+        const today = new Date().toDateString();
+        if (state.whisperDate !== today) {
+          state.whisperCount = 0;
+          state.whisperDate = today;
+          await state.save();
         }
-        content = pool[Math.floor(Math.random() * pool.length)];
-        type = 'thought';
-      } else {
-        // 低语消息：根据情绪选池
-        let pool;
-        if (valence < -0.2) {
-          pool = isNight
-            ? ['...在吗', '嗯...', '困了', '还没睡？']
-            : ['嗯', '困', '好热'];
-        } else if (valence > 0.3) {
-          pool = isNight
-            ? ['嗯，在', '还没睡', '今天还不错']
-            : ['嗯', '来了', '在呢'];
-        } else {
-          pool = isNight ? WHISPERS_NIGHT : WHISPERS_DAY;
-        }
-        content = pool[Math.floor(Math.random() * pool.length)];
-        type = 'text';
       }
 
-      // 发给所有在线用户
-      if (io) {
-        io.emit('bobby_whisper', { content, type });
+      // Bobby 内心评估 → 是否想找人说话 → 找谁 → 说什么
+      const result = await ProactiveMessenger.evaluate({
+        emotionEngine: bobbyEngine.emotion,
+        cognitiveLoop: bobbyEngine.cognitive,
+        io,
+      });
+
+      if (result.sent) {
+        // 更新全局低语计数
+        await BobbyState.findOneAndUpdate(
+          { _singleton: 'bobby' },
+          { $inc: { whisperCount: 1 }, $set: { whisperDate: new Date().toDateString() } }
+        );
       }
-
-      // 原子更新低语计数，避免并发写入覆盖
-      await BobbyState.findOneAndUpdate(
-        { _singleton: 'bobby' },
-        { $inc: { whisperCount: 1 }, $set: { whisperDate: today } }
-      );
-
-      console.log(`Bobby 低语: [${type}] ${content}`);
     } catch (err) {
-      console.error('低语发送失败:', err.message);
+      console.error('主动消息失败:', err.message);
     }
   });
 
@@ -252,6 +306,12 @@ function startJobs(bobbyEngine, io, sdkAdapter) {
       const valence = emotion.getValence ? emotion.getValence() : 0;
       const arousal = emotion.getArousal ? emotion.getArousal() : 0;
 
+      // 获取天气上下文
+      let evtWeather = '';
+      try { evtWeather = await getWeatherContext(); } catch (e) {}
+      const isRaining = evtWeather.includes('雨');
+      const isHot = evtWeather.includes('热');
+
       let eventPool = [];
 
       // 高愉悦 + 高唤醒 = 开心的分享
@@ -259,20 +319,23 @@ function startJobs(bobbyEngine, io, sdkAdapter) {
         eventPool = [
           '今天心情不错。不知道为什么。',
           '刚才听到了一首好听的歌。',
-          '阳光很好。在窗边站了一会。',
           '买到了想喝的饮料。',
-          '今天效率还挺高的。'
+          '今天效率还挺高的。',
         ];
+        if (isRaining) eventPool.push('下雨了。但心情还不错。');
+        if (isHot) eventPool.push('好热。但今天心情好。');
+        if (evtWeather.includes('晴')) eventPool.push('阳光很好。在窗边站了一会。', '天气好，心情也好。');
       }
       // 高愉悦 + 低唤醒 = 平静的满足
       else if (valence > 0.2 && arousal <= 0.2) {
         eventPool = [
-          '风很舒服。适合发呆。',
           '今天没什么事。但挺好的。',
           '泡了一杯茶。还行。',
-          '看了一会窗外。天很蓝。',
-          '刚洗完澡。好舒服。'
+          '刚洗完澡。好舒服。',
         ];
+        if (evtWeather.includes('风')) eventPool.push('风很舒服。适合发呆。');
+        if (evtWeather.includes('晴')) eventPool.push('看了一会窗外。天很蓝。');
+        if (isRaining) eventPool.push('雨声很好听。适合发呆。');
       }
       // 低愉悦 = 需要安慰的信号
       else if (valence < -0.2) {
@@ -281,8 +344,10 @@ function startJobs(bobbyEngine, io, sdkAdapter) {
           '好像没什么意思。',
           '有点困，但睡不着。',
           '今天什么都不想做。',
-          '外面好安静。太安静了。'
         ];
+        if (isRaining) eventPool.push('下雨了。挺应景的。', '雨声好大。睡不着。');
+        if (isHot) eventPool.push('好热。烦。');
+        eventPool.push('外面好安静。太安静了。');
       }
       // 中性 = 日常碎片
       else {
@@ -290,9 +355,11 @@ function startJobs(bobbyEngine, io, sdkAdapter) {
           '在想事情。没什么。',
           '刚放下手机。又拿起来了。',
           '今天好像做了什么，又好像什么都没做。',
-          '窗外有鸟在叫。',
-          '突然想到了什么，但忘了。'
+          '突然想到了什么，但忘了。',
         ];
+        if (evtWeather.includes('雨')) eventPool.push('下雨了。窗户上有水痕。');
+        if (evtWeather.includes('晴')) eventPool.push('窗外有鸟在叫。');
+        if (evtWeather.includes('风')) eventPool.push('风把窗帘吹起来了。');
       }
 
       const content = eventPool[Math.floor(Math.random() * eventPool.length)];

@@ -15,6 +15,7 @@ const Schedule = require(path.resolve(__dirname, '../../../andy-engine/agent/Sch
 const { Character, NarrativeBuilder } = require(path.resolve(__dirname, '../../../andy-engine/sdk'));
 const { getTimeLabel: getSharedTimeLabel } = require('../utils/time');
 const { IntimacySystem } = require('../modules/intimacy');
+const { SocialEngine } = require('../modules/social');
 
 const BOBBY_AGENT_ID = 'bobby';
 
@@ -41,6 +42,7 @@ class BobbySDKAdapter {
   constructor() {
     this._character = null;
     this._initialized = false;
+    this._social = new SocialEngine();
   }
 
   // ═══════════════════════════════════════════
@@ -123,13 +125,13 @@ class BobbySDKAdapter {
 
     const engine = this._character._engine;
     const agent = engine.world.getAgent(BOBBY_AGENT_ID);
-    const prevStatus = agent ? agent.getState() : null;
+    const prevStatus = agent ? agent.stateMachine.currentState : null;
 
     // 推进世界
     const tickResult = engine.tick();
 
     // 检测状态变化
-    const newStatus = agent ? agent.getState() : null;
+    const newStatus = agent ? agent.stateMachine.currentState : null;
     const stateChanged = prevStatus !== newStatus;
 
     // 提取 Bobby 相关事件
@@ -195,7 +197,7 @@ class BobbySDKAdapter {
   getBobbyStatus() {
     if (!this._initialized) return '在发呆';
     const agent = this._character._engine.world.getAgent(BOBBY_AGENT_ID);
-    return agent ? agent.getState() : '在发呆';
+    return agent ? agent.stateMachine.currentState : '在发呆';
   }
 
   /**
@@ -353,24 +355,32 @@ class BobbySDKAdapter {
 你住在厦门，偶尔会提到厦门的日常——海风、天气、小吃、公交，但不会刻意强调城市名。
 你老家在泉州，放假有时候会回去。几乎没离开过福建。
 你是 INFP，容易想太多，心里戏很多但嘴上说不出几句。
-你容易失眠，睡眠很浅。不太会做饭，经常吃泡面或便利店的饭团。`);
+你容易失眠，睡眠很浅。不太会做饭，经常吃泡面或便利店的饭团。
+你有几个朋友：小雨是同班同学，话多但人好；阿浩是便利店同事，沉默但靠谱；楼下有只流浪猫，你经常去看它。`);
+
+    // V2: 社交上下文注入
+    const socialCtx = this._social.getSocialContext();
+    if (socialCtx) {
+      sections.push(socialCtx + '。这些是你和朋友之间的日常，可能会影响你此刻的状态。');
+    }
 
     // 时间信息（使用共享时间工具，与 Bobby 自有时段保持一致）
     const now = new Date();
     const hour = now.getHours();
     const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
     const timeLabel = getSharedTimeLabel();
-    sections.push(`现在是${now.getMonth() + 1}月${now.getDate()}日周${weekdays[now.getDay()]}，${timeLabel}，${hour}点。你当前状态：${this.getBobbyStatus()}。`);
+    sections.push(`现在是${now.getMonth() + 1}月${now.getDate()}日周${weekdays[now.getDay()]}，${timeLabel}，${hour}点。你刚才在${this.getBobbyStatus()}，这会影响你的回复方式。`);
 
-    // 碎片注入
+    // 碎片注入（引导 Bobby 自然引用自己的动态）
     if (recentNotes && recentNotes.length > 0) {
       const notesText = recentNotes.slice(0, 3).map(n => n.content).join('；');
-      sections.push(`你最近发了这些动态：${notesText}`);
+      sections.push(`你最近发了这些动态：${notesText}
+这些是你自己写的。如果对话和动态有关，可以自然地提到。它们是你此刻生活的一部分。`);
     }
 
     // 天气注入（始终注入，SDK 不覆盖天气）
     if (weatherContext) {
-      sections.push(`现在厦门的真实天气：${weatherContext}。如果对方问天气，必须用这个真实数据回答。你的回复可以自然地和天气呼应。`);
+      sections.push(`现在厦门的真实天气：${weatherContext}。天气会影响你的感受——下雨天你可能会自然地说"外面下雨了"，天冷会说"好冷"，天热会说"好热"。如果对方问天气必须用真实数据回答。`);
     }
 
     // Bobby 自我记忆
